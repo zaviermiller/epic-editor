@@ -118,11 +118,16 @@ export class GitHubApi {
   /**
    * Make a request to the GitHub API
    */
-  private async request<T>(endpoint: string): Promise<T> {
+  private async request<T>(
+    endpoint: string,
+    options?: { method?: string; body?: unknown },
+  ): Promise<T> {
     const url = `${this.config.baseUrl}${endpoint}`;
 
     const response = await fetch(url, {
+      method: options?.method || "GET",
       headers: this.getHeaders(),
+      body: options?.body ? JSON.stringify(options.body) : undefined,
     });
 
     if (!response.ok) {
@@ -306,6 +311,59 @@ export class GitHubApi {
     }
 
     return allDeps;
+  }
+
+  /**
+   * Add a dependency (blocked_by relationship) to an issue
+   *
+   * API: POST /repos/{owner}/{repo}/issues/{issue_number}/dependencies/blocked_by
+   * Docs: https://docs.github.com/en/rest/issues/issue-dependencies#add-a-dependency-an-issue-is-blocked-by
+   *
+   * @param owner - Repository owner
+   * @param repo - Repository name
+   * @param issueNumber - The issue number that will be blocked
+   * @param blockingIssueId - The ID (not number) of the blocking issue
+   * @returns The blocking issue data
+   */
+  async addDependency(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    blockingIssueId: number,
+  ): Promise<GitHubIssue> {
+    return this.request<GitHubIssue>(
+      `/repos/${owner}/${repo}/issues/${issueNumber}/dependencies/blocked_by`,
+      {
+        method: "POST",
+        body: { issue_id: blockingIssueId },
+      },
+    );
+  }
+
+  /**
+   * Remove a dependency (blocked_by relationship) from an issue
+   *
+   * API: DELETE /repos/{owner}/{repo}/issues/{issue_number}/dependencies/blocked_by/{issue_id}
+   * Docs: https://docs.github.com/en/rest/issues/issue-dependencies#remove-dependency-an-issue-is-blocked-by
+   *
+   * @param owner - Repository owner
+   * @param repo - Repository name
+   * @param issueNumber - The issue number that is blocked
+   * @param blockingIssueId - The ID (not number) of the blocking issue to remove
+   * @returns The removed blocking issue data
+   */
+  async removeDependency(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    blockingIssueId: number,
+  ): Promise<GitHubIssue> {
+    return this.request<GitHubIssue>(
+      `/repos/${owner}/${repo}/issues/${issueNumber}/dependencies/blocked_by/${blockingIssueId}`,
+      {
+        method: "DELETE",
+      },
+    );
   }
 
   /**
@@ -518,6 +576,7 @@ export function issueToTask(
   blockedByIssues: GitHubIssue[],
 ): Task {
   return {
+    id: issue.id,
     number: issue.number,
     title: issue.title,
     body: issue.body,
@@ -543,6 +602,7 @@ export function issueToBatch(
     tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0;
 
   return {
+    id: issue.id,
     number: issue.number,
     title: issue.title,
     body: issue.body,
@@ -573,6 +633,7 @@ export function buildEpic(
       : 0;
 
   return {
+    id: issue.id,
     number: issue.number,
     title: issue.title,
     body: issue.body,

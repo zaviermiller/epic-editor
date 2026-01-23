@@ -5,6 +5,7 @@
  */
 
 export { ElkCanvas } from "./ElkCanvas";
+export type { SaveResult } from "./ElkCanvas";
 export { ElkBatchGroup } from "./ElkBatchGroup";
 export { ElkTaskNode } from "./ElkTaskNode";
 export { ElkEdges } from "./ElkEdges";

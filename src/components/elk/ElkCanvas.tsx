@@ -20,6 +20,26 @@ import { ElkBatchGroup } from "./ElkBatchGroup";
 import { ElkTaskNode } from "./ElkTaskNode";
 import { ElkEdges } from "./ElkEdges";
 import { CanvasToolbar, ToolType } from "./CanvasToolbar";
+import { GitHubApi } from "@/lib/github";
+import { Loader2 } from "lucide-react";
+
+/**
+ * Result of a save operation for relationship changes
+ */
+export interface SaveResult {
+  success: boolean;
+  addedCount: number;
+  removedCount: number;
+  errors: string[];
+  /** Successfully added task dependencies (from blocks to) */
+  addedTaskEdges: { from: number; to: number }[];
+  /** Successfully added batch dependencies (from blocks to) */
+  addedBatchEdges: { from: number; to: number }[];
+  /** Successfully removed task dependencies (from blocks to) */
+  removedTaskEdges: { from: number; to: number }[];
+  /** Successfully removed batch dependencies (from blocks to) */
+  removedBatchEdges: { from: number; to: number }[];
+}
 
 interface ElkCanvasProps {
   /** Epic to visualize */
@@ -28,6 +48,10 @@ interface ElkCanvasProps {
   config?: ElkLayoutConfig;
   /** Callback when a task is clicked */
   onTaskClick?: (task: Task) => void;
+  /** Callback when relationship changes are saved */
+  onSave?: (result: SaveResult) => void;
+  /** GitHub API instance (required for saving changes) */
+  api?: GitHubApi;
   /** Class name for the container */
   className?: string;
 }
@@ -45,12 +69,15 @@ export function ElkCanvas({
   epic,
   config = DEFAULT_ELK_CONFIG,
   onTaskClick,
+  onSave,
+  api,
   className = "",
 }: ElkCanvasProps) {
   // Layout state
   const [layout, setLayout] = useState<ElkLayoutResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Interaction state
   const [highlightedTask, setHighlightedTask] = useState<number | null>(null);
@@ -183,17 +210,264 @@ export function ElkCanvas({
     removedBatchEdges,
   ]);
 
-  // Handle save button click (no-op for now)
-  const handleSave = useCallback(() => {
-    // TODO: Implement save functionality
-    console.log("Save clicked - pending task edges:", pendingEdges);
-    console.log("Save clicked - removed task edges:", Array.from(removedEdges));
-    console.log("Save clicked - pending batch edges:", pendingBatchEdges);
-    console.log(
-      "Save clicked - removed batch edges:",
-      Array.from(removedBatchEdges),
-    );
-  }, [pendingEdges, removedEdges, pendingBatchEdges, removedBatchEdges]);
+  // Helper to find an issue (task or batch) by its number and get its ID
+  const findIssueIdByNumber = useCallback(
+    (issueNumber: number): number | null => {
+      // Check if it's the epic itself
+      if (epic.number === issueNumber) {
+        return epic.id;
+      }
+      // Check batches
+      for (const batch of epic.batches) {
+        if (batch.number === issueNumber) {
+          return batch.id;
+        }
+        // Check tasks within batch
+        for (const task of batch.tasks) {
+          if (task.number === issueNumber) {
+            return task.id;
+          }
+        }
+      }
+      return null;
+    },
+    [epic],
+  );
+
+  // Handle save button click - saves changes to GitHub
+  const handleSave = useCallback(async () => {
+    if (!api) {
+      console.error("Cannot save: No API instance provided");
+      onSave?.({
+        success: false,
+        addedCount: 0,
+        removedCount: 0,
+        errors: ["No API instance provided. Please sign in to save changes."],
+        addedTaskEdges: [],
+        addedBatchEdges: [],
+        removedTaskEdges: [],
+        removedBatchEdges: [],
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    const errors: string[] = [];
+    let addedCount = 0;
+    let removedCount = 0;
+
+    // Track successfully saved edges
+    const successfullyAddedTaskEdges: { from: number; to: number }[] = [];
+    const successfullyAddedBatchEdges: { from: number; to: number }[] = [];
+    const successfullyRemovedTaskEdges: { from: number; to: number }[] = [];
+    const successfullyRemovedBatchEdges: { from: number; to: number }[] = [];
+
+    try {
+      // Process added task edges
+      // When user clicks A then B, they create edge from A to B
+      // This means B is blocked by A, so we need to add A as a dependency of B
+      for (const pending of pendingEdges) {
+        const blockingIssueId = findIssueIdByNumber(pending.from);
+        if (!blockingIssueId) {
+          errors.push(`Could not find issue ID for task #${pending.from}`);
+          continue;
+        }
+
+        try {
+          await api.addDependency(
+            epic.owner,
+            epic.repo,
+            pending.to, // The issue that will be blocked (issue_number)
+            blockingIssueId, // The blocking issue (issue_id)
+          );
+          addedCount++;
+          successfullyAddedTaskEdges.push({
+            from: pending.from,
+            to: pending.to,
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Unknown error";
+          errors.push(
+            `Failed to add dependency: #${pending.to} blocked by #${pending.from} - ${message}`,
+          );
+        }
+      }
+
+      // Process added batch edges
+      for (const pending of pendingBatchEdges) {
+        const blockingIssueId = findIssueIdByNumber(pending.from);
+        if (!blockingIssueId) {
+          errors.push(`Could not find issue ID for batch #${pending.from}`);
+          continue;
+        }
+
+        try {
+          await api.addDependency(
+            epic.owner,
+            epic.repo,
+            pending.to,
+            blockingIssueId,
+          );
+          addedCount++;
+          successfullyAddedBatchEdges.push({
+            from: pending.from,
+            to: pending.to,
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Unknown error";
+          errors.push(
+            `Failed to add batch dependency: #${pending.to} blocked by #${pending.from} - ${message}`,
+          );
+        }
+      }
+
+      // Process removed task edges
+      // Edge IDs are in format "edge-{dependency}-{dependent}"
+      // where dependency blocks dependent
+      for (const edgeId of removedEdges) {
+        const match = edgeId.match(/^edge-(\d+)-(\d+)$/);
+        if (!match) continue;
+
+        const dependencyNumber = parseInt(match[1], 10); // The blocking issue
+        const dependentNumber = parseInt(match[2], 10); // The blocked issue
+
+        const blockingIssueId = findIssueIdByNumber(dependencyNumber);
+        if (!blockingIssueId) {
+          errors.push(`Could not find issue ID for task #${dependencyNumber}`);
+          continue;
+        }
+
+        try {
+          await api.removeDependency(
+            epic.owner,
+            epic.repo,
+            dependentNumber, // The issue that is blocked
+            blockingIssueId, // The blocking issue ID
+          );
+          removedCount++;
+          successfullyRemovedTaskEdges.push({
+            from: dependencyNumber,
+            to: dependentNumber,
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Unknown error";
+          errors.push(
+            `Failed to remove dependency: #${dependentNumber} blocked by #${dependencyNumber} - ${message}`,
+          );
+        }
+      }
+
+      // Process removed batch edges
+      for (const edgeId of removedBatchEdges) {
+        const match = edgeId.match(/^batch-edge-(\d+)-(\d+)$/);
+        if (!match) continue;
+
+        const dependencyNumber = parseInt(match[1], 10);
+        const dependentNumber = parseInt(match[2], 10);
+
+        const blockingIssueId = findIssueIdByNumber(dependencyNumber);
+        if (!blockingIssueId) {
+          errors.push(`Could not find issue ID for batch #${dependencyNumber}`);
+          continue;
+        }
+
+        try {
+          await api.removeDependency(
+            epic.owner,
+            epic.repo,
+            dependentNumber,
+            blockingIssueId,
+          );
+          removedCount++;
+          successfullyRemovedBatchEdges.push({
+            from: dependencyNumber,
+            to: dependentNumber,
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Unknown error";
+          errors.push(
+            `Failed to remove batch dependency: #${dependentNumber} blocked by #${dependencyNumber} - ${message}`,
+          );
+        }
+      }
+
+      // Clear only the successfully saved edges from pending state
+      // Remove successfully added edges from pending
+      setPendingEdges((prev) =>
+        prev.filter(
+          (e) =>
+            !successfullyAddedTaskEdges.some(
+              (s) => s.from === e.from && s.to === e.to,
+            ),
+        ),
+      );
+      setPendingBatchEdges((prev) =>
+        prev.filter(
+          (e) =>
+            !successfullyAddedBatchEdges.some(
+              (s) => s.from === e.from && s.to === e.to,
+            ),
+        ),
+      );
+
+      // Remove successfully removed edges from the removed set
+      setRemovedEdges((prev) => {
+        const next = new Set(prev);
+        for (const edge of successfullyRemovedTaskEdges) {
+          next.delete(`edge-${edge.from}-${edge.to}`);
+        }
+        return next;
+      });
+      setRemovedBatchEdges((prev) => {
+        const next = new Set(prev);
+        for (const edge of successfullyRemovedBatchEdges) {
+          next.delete(`batch-edge-${edge.from}-${edge.to}`);
+        }
+        return next;
+      });
+
+      // Clear selection state
+      setEditModeSourceTask(null);
+      setEditModeSourceBatch(null);
+
+      const result: SaveResult = {
+        success: errors.length === 0,
+        addedCount,
+        removedCount,
+        errors,
+        addedTaskEdges: successfullyAddedTaskEdges,
+        addedBatchEdges: successfullyAddedBatchEdges,
+        removedTaskEdges: successfullyRemovedTaskEdges,
+        removedBatchEdges: successfullyRemovedBatchEdges,
+      };
+
+      onSave?.(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      errors.push(`Save operation failed: ${message}`);
+      onSave?.({
+        success: false,
+        addedCount,
+        removedCount,
+        errors,
+        addedTaskEdges: successfullyAddedTaskEdges,
+        addedBatchEdges: successfullyAddedBatchEdges,
+        removedTaskEdges: successfullyRemovedTaskEdges,
+        removedBatchEdges: successfullyRemovedBatchEdges,
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [
+    api,
+    epic,
+    pendingEdges,
+    pendingBatchEdges,
+    removedEdges,
+    removedBatchEdges,
+    findIssueIdByNumber,
+    onSave,
+  ]);
 
   // Handle clear changes button click
   const handleClearChanges = useCallback(() => {
@@ -745,15 +1019,26 @@ export function ElkCanvas({
           <div className="flex items-center gap-2">
             <button
               onClick={handleClearChanges}
-              className="px-4 py-2 text-sm font-medium bg-card border border-border text-foreground rounded-lg hover:bg-muted transition-colors shadow-sm"
+              disabled={isSaving}
+              className="px-4 py-2 text-sm font-medium bg-card border border-border text-foreground rounded-lg hover:bg-muted transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Clear Changes
             </button>
             <button
               onClick={handleSave}
-              className="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm"
+              disabled={isSaving || !api}
+              className="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              Save Changes
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : !api ? (
+                "Sign in to Save"
+              ) : (
+                "Save Changes"
+              )}
             </button>
           </div>
         )}

@@ -7,9 +7,10 @@
 
 "use client";
 
-import { useEffect, useState, useCallback, use } from "react";
+import { useEffect, useState, useCallback, use, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { ElkEpicDiagram } from "@/components/ElkEpicDiagram";
+import { SaveResult } from "@/components/elk/ElkCanvas";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +21,8 @@ import {
   Star,
   RefreshCw,
   ExternalLink,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Epic, Task, LoadingState, ApiError } from "@/types";
@@ -74,6 +77,76 @@ function ErrorDisplay({
   );
 }
 
+/**
+ * Toast notification for save results
+ */
+function SaveToast({
+  result,
+  onClose,
+}: {
+  result: SaveResult;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 5000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div
+      className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg border ${
+        result.success
+          ? "bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800"
+          : "bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800"
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        {result.success ? (
+          <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0" />
+        ) : (
+          <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0" />
+        )}
+        <div className="flex-1">
+          <p
+            className={`font-medium ${
+              result.success
+                ? "text-green-800 dark:text-green-200"
+                : "text-red-800 dark:text-red-200"
+            }`}
+          >
+            {result.success ? "Changes Saved" : "Save Failed"}
+          </p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {result.addedCount > 0 &&
+              `Added ${result.addedCount} dependencies. `}
+            {result.removedCount > 0 &&
+              `Removed ${result.removedCount} dependencies. `}
+            {result.addedCount === 0 &&
+              result.removedCount === 0 &&
+              "No changes made."}
+          </p>
+          {result.errors.length > 0 && (
+            <ul className="text-sm text-red-600 dark:text-red-400 mt-2 list-disc list-inside">
+              {result.errors.slice(0, 3).map((err, i) => (
+                <li key={i}>{err}</li>
+              ))}
+              {result.errors.length > 3 && (
+                <li>...and {result.errors.length - 3} more errors</li>
+              )}
+            </ul>
+          )}
+        </div>
+        <button
+          onClick={onClose}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          ×
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function VisPage({ params }: VisPageProps) {
   const { owner, repo, issue } = use(params);
   const issueNumber = parseInt(issue, 10);
@@ -86,6 +159,29 @@ export default function VisPage({ params }: VisPageProps) {
   const [error, setError] = useState<ApiError | null>(null);
   const [isFavorited, setIsFavorited] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [saveResult, setSaveResult] = useState<SaveResult | null>(null);
+
+  // Create API instance with token
+  const [apiToken, setApiToken] = useState<string | null>(null);
+
+  // Fetch token when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      getToken().then(setApiToken);
+    } else {
+      setApiToken(null);
+    }
+  }, [isAuthenticated, getToken]);
+
+  // Create memoized API instance
+  const api = useMemo(() => {
+    if (isMockRoute) return undefined;
+    const apiInstance = new GitHubApi();
+    if (apiToken) {
+      apiInstance.setToken(apiToken);
+    }
+    return apiInstance;
+  }, [apiToken, isMockRoute]);
 
   // Check favorite status on mount (not for mock)
   useEffect(() => {
@@ -345,9 +441,103 @@ export default function VisPage({ params }: VisPageProps) {
             <ElkEpicDiagram
               epic={epic}
               onTaskClick={handleTaskClick}
+              onSave={(result) => {
+                setSaveResult(result);
+
+                // Apply changes optimistically to the epic state
+                if (result.addedCount > 0 || result.removedCount > 0) {
+                  setEpic((prevEpic) => {
+                    if (!prevEpic) return prevEpic;
+
+                    // Deep clone the epic
+                    const updatedEpic: Epic = JSON.parse(
+                      JSON.stringify(prevEpic),
+                    );
+
+                    // Apply added task edges
+                    for (const edge of result.addedTaskEdges) {
+                      // edge.from blocks edge.to, so edge.to depends on edge.from
+                      // Add to dependencies array
+                      if (
+                        !updatedEpic.dependencies.some(
+                          (d) => d.from === edge.to && d.to === edge.from,
+                        )
+                      ) {
+                        updatedEpic.dependencies.push({
+                          from: edge.to,
+                          to: edge.from,
+                          type: "depends-on",
+                        });
+                      }
+                      // Add to task's dependsOn array
+                      for (const batch of updatedEpic.batches) {
+                        const task = batch.tasks.find(
+                          (t) => t.number === edge.to,
+                        );
+                        if (task && !task.dependsOn.includes(edge.from)) {
+                          task.dependsOn.push(edge.from);
+                        }
+                      }
+                    }
+
+                    // Apply added batch edges
+                    for (const edge of result.addedBatchEdges) {
+                      const batch = updatedEpic.batches.find(
+                        (b) => b.number === edge.to,
+                      );
+                      if (batch && !batch.dependsOn.includes(edge.from)) {
+                        batch.dependsOn.push(edge.from);
+                      }
+                    }
+
+                    // Apply removed task edges
+                    for (const edge of result.removedTaskEdges) {
+                      // Remove from dependencies array
+                      updatedEpic.dependencies =
+                        updatedEpic.dependencies.filter(
+                          (d) => !(d.from === edge.to && d.to === edge.from),
+                        );
+                      // Remove from task's dependsOn array
+                      for (const batch of updatedEpic.batches) {
+                        const task = batch.tasks.find(
+                          (t) => t.number === edge.to,
+                        );
+                        if (task) {
+                          task.dependsOn = task.dependsOn.filter(
+                            (d) => d !== edge.from,
+                          );
+                        }
+                      }
+                    }
+
+                    // Apply removed batch edges
+                    for (const edge of result.removedBatchEdges) {
+                      const batch = updatedEpic.batches.find(
+                        (b) => b.number === edge.to,
+                      );
+                      if (batch) {
+                        batch.dependsOn = batch.dependsOn.filter(
+                          (d) => d !== edge.from,
+                        );
+                      }
+                    }
+
+                    return updatedEpic;
+                  });
+
+                  // Do a background refresh to sync with server
+                  fetchEpic(true);
+                }
+              }}
+              api={api}
               showHeader={false}
             />
           </div>
+        )}
+
+        {/* Save result toast */}
+        {saveResult && (
+          <SaveToast result={saveResult} onClose={() => setSaveResult(null)} />
         )}
       </main>
     </div>

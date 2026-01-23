@@ -19,6 +19,8 @@ export type IssueStatus = "done" | "in-progress" | "planned" | "not-planned";
  * GitHub Issue type - represents a single issue from the API
  */
 export interface GitHubIssue {
+  /** Unique ID of the issue (used for API operations like dependencies) */
+  id: number;
   /** Issue number within the repository */
   number: number;
   /** Issue title */
@@ -105,6 +107,8 @@ export interface Dependency {
  * Base issue type with common properties
  */
 export interface BaseIssue {
+  /** Unique ID of the issue (used for API operations) */
+  id: number;
   /** Issue number */
   number: number;
   /** Issue title */

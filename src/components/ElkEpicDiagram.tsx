@@ -9,15 +9,20 @@
 "use client";
 
 import { Epic, Task } from "@/types";
-import { ElkCanvas } from "./elk/ElkCanvas";
+import { ElkCanvas, SaveResult } from "./elk/ElkCanvas";
 import { StatusLegend } from "./StatusLegend";
 import { ExternalLink } from "lucide-react";
 import { DEFAULT_ELK_CONFIG, ElkLayoutConfig } from "@/lib/elk";
+import { GitHubApi } from "@/lib/github";
 
 interface ElkEpicDiagramProps {
   epic: Epic;
   /** Callback when a task is clicked */
   onTaskClick?: (task: Task) => void;
+  /** Callback when relationship changes are saved */
+  onSave?: (result: SaveResult) => void;
+  /** GitHub API instance for saving changes */
+  api?: GitHubApi;
   /** Optional layout configuration override */
   config?: ElkLayoutConfig;
   /** Whether to show the header with title and link (default: true) */
@@ -27,6 +32,8 @@ interface ElkEpicDiagramProps {
 export function ElkEpicDiagram({
   epic,
   onTaskClick,
+  onSave,
+  api,
   config = DEFAULT_ELK_CONFIG,
   showHeader = true,
 }: ElkEpicDiagramProps) {
@@ -62,6 +69,8 @@ export function ElkEpicDiagram({
           epic={epic}
           config={config}
           onTaskClick={onTaskClick}
+          onSave={onSave}
+          api={api}
           className="h-full w-full"
         />
       </div>

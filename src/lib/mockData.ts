@@ -17,6 +17,7 @@ function createMockTask(
   dependsOn: number[] = [],
 ): Task {
   return {
+    id: number * 1000, // Mock ID based on number
     number,
     title,
     body: `This is the body of task #${number}`,
@@ -50,6 +51,7 @@ function createMockBatch(
     tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0;
 
   return {
+    id: number * 1000, // Mock ID based on number
     number,
     title,
     body: `This is the body of batch #${number}`,
@@ -75,6 +77,7 @@ function createMockBatch(
  * Mock Epic data matching the reference image structure
  */
 export const mockEpic: Epic = {
+  id: 8833000, // Mock ID based on number
   number: 8833,
   title: "Remove friction from metered product launch",
   body: "Epic to track all work for removing friction from metered product launch",

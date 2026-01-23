@@ -13,16 +13,16 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  AlertTriangle,
-  Lock,
-  Unlock,
-  LogOut,
-  Key,
-  Github,
-  Loader2,
-  X,
-  ExternalLink,
-} from "lucide-react";
+  AlertIcon,
+  LockIcon,
+  UnlockIcon,
+  SignOutIcon,
+  KeyIcon,
+  MarkGithubIcon,
+  SyncIcon,
+  XIcon,
+  LinkExternalIcon,
+} from "@primer/octicons-react";
 
 interface AuthUser {
   id: number;
@@ -96,7 +96,7 @@ export function AuthStatus({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-medium truncate">{user.login}</span>
-            <Lock className="h-3 w-3 text-green-500" />
+            <LockIcon size={12} className="text-green-500" />
           </div>
           <p className="text-xs text-muted-foreground">
             Private repos accessible
@@ -104,7 +104,7 @@ export function AuthStatus({
         </div>
         {onSignOut && (
           <Button variant="ghost" size="sm" onClick={onSignOut}>
-            <LogOut className="h-4 w-4" />
+            <SignOutIcon size={16} />
           </Button>
         )}
       </div>
@@ -115,12 +115,12 @@ export function AuthStatus({
     <div className="rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-3">
       <div className="flex items-center gap-3">
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-yellow-500/20">
-          <AlertTriangle className="h-4 w-4 text-yellow-500" />
+          <AlertIcon size={16} className="text-yellow-500" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-medium">Not authenticated</span>
-            <Unlock className="h-3 w-3 text-yellow-500" />
+            <UnlockIcon size={12} className="text-yellow-500" />
           </div>
           <p className="text-xs text-muted-foreground">
             Only public repositories accessible
@@ -150,7 +150,7 @@ export function AuthStatus({
               disabled={!patValue.trim() || isSubmitting}
             >
               {isSubmitting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <SyncIcon size={16} className="animate-spin" />
               ) : (
                 "Submit"
               )}
@@ -165,7 +165,7 @@ export function AuthStatus({
               }}
               disabled={isSubmitting}
             >
-              <X className="h-4 w-4" />
+              <XIcon size={16} />
             </Button>
           </div>
           {patError && <p className="text-xs text-red-500">{patError}</p>}
@@ -177,7 +177,7 @@ export function AuthStatus({
               className="inline-flex items-center gap-1 text-blue-500 hover:underline"
             >
               Create a token
-              <ExternalLink className="h-3 w-3" />
+              <LinkExternalIcon size={12} />
             </a>{" "}
             with <code className="text-xs bg-muted px-1 rounded">repo</code>{" "}
             scope
@@ -192,7 +192,7 @@ export function AuthStatus({
               onClick={onSignIn}
               className="flex-1"
             >
-              <Github className="h-4 w-4 mr-2" />
+              <MarkGithubIcon size={16} className="mr-2" />
               Sign in with GitHub
             </Button>
           )}
@@ -203,7 +203,7 @@ export function AuthStatus({
               onClick={() => setShowPATInput(true)}
               className="flex-1"
             >
-              <Key className="h-4 w-4 mr-2" />
+              <KeyIcon size={16} className="mr-2" />
               Use Token (PAT)
             </Button>
           )}

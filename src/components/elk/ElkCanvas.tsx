@@ -21,7 +21,8 @@ import { ElkTaskNode } from "./ElkTaskNode";
 import { ElkEdges } from "./ElkEdges";
 import { CanvasToolbar, ToolType } from "./CanvasToolbar";
 import { GitHubApi } from "@/lib/github";
-import { Loader2 } from "lucide-react";
+import { SyncIcon } from "@primer/octicons-react";
+import { StatusLegend } from "../StatusLegend";
 
 /**
  * Result of a save operation for relationship changes
@@ -109,7 +110,39 @@ export function ElkCanvas({
     new Set(),
   );
 
+  // Move issue mode state
+  const [draggingTask, setDraggingTask] = useState<{
+    taskNumber: number;
+    taskId: number;
+    sourceBatchNumber: number;
+  } | null>(null);
+  const [dropTargetBatch, setDropTargetBatch] = useState<number | null>(null);
+  const [pendingMoves, setPendingMoves] = useState<
+    {
+      taskNumber: number;
+      taskId: number;
+      fromBatchNumber: number;
+      toBatchNumber: number;
+    }[]
+  >([]);
+  // Track moves that have been saved but waiting for refresh
+  const [committedMoves, setCommittedMoves] = useState<Set<number>>(new Set());
+
   const isEditMode = activeTool === "edit-relationships";
+  const isMoveMode = activeTool === "move-issue";
+
+  // Clear committed moves when epic changes (refresh happened)
+  const epicId = epic.id;
+  useEffect(() => {
+    // When epic changes, clear any committed moves since the refresh brought new data
+    if (committedMoves.size > 0) {
+      // Remove committed moves from pending moves
+      setPendingMoves((prev) =>
+        prev.filter((m) => !committedMoves.has(m.taskNumber)),
+      );
+      setCommittedMoves(new Set());
+    }
+  }, [epicId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Compute original task edges from the epic for comparison
   const originalEdges = useMemo(() => {
@@ -200,6 +233,14 @@ export function ElkCanvas({
       }
     }
 
+    // Check for pending moves (exclude committed ones since they've been saved)
+    const uncommittedMoves = pendingMoves.filter(
+      (m) => !committedMoves.has(m.taskNumber),
+    );
+    if (uncommittedMoves.length > 0) {
+      return true;
+    }
+
     return false;
   }, [
     originalEdges,
@@ -208,6 +249,8 @@ export function ElkCanvas({
     originalBatchEdges,
     pendingBatchEdges,
     removedBatchEdges,
+    pendingMoves,
+    committedMoves,
   ]);
 
   // Helper to find an issue (task or batch) by its number and get its ID
@@ -391,6 +434,27 @@ export function ElkCanvas({
         }
       }
 
+      // Process pending moves
+      const successfullyMovedTasks: number[] = [];
+      for (const move of pendingMoves) {
+        try {
+          await api.addSubIssue(
+            epic.owner,
+            epic.repo,
+            move.toBatchNumber, // parent issue number (target batch)
+            move.taskId, // sub-issue ID to add
+            true, // replace_parent - moves the issue to the new parent
+          );
+          addedCount++;
+          successfullyMovedTasks.push(move.taskNumber);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Unknown error";
+          errors.push(
+            `Failed to move issue #${move.taskNumber} to batch #${move.toBatchNumber}: ${message}`,
+          );
+        }
+      }
+
       // Clear only the successfully saved edges from pending state
       // Remove successfully added edges from pending
       setPendingEdges((prev) =>
@@ -409,6 +473,18 @@ export function ElkCanvas({
             ),
         ),
       );
+
+      // Mark successfully moved tasks as committed (they stay in pendingMoves until refresh)
+      // This keeps the visual move in place while the background refresh happens
+      if (successfullyMovedTasks.length > 0) {
+        setCommittedMoves((prev) => {
+          const next = new Set(prev);
+          for (const taskNumber of successfullyMovedTasks) {
+            next.add(taskNumber);
+          }
+          return next;
+        });
+      }
 
       // Remove successfully removed edges from the removed set
       setRemovedEdges((prev) => {
@@ -463,6 +539,7 @@ export function ElkCanvas({
     epic,
     pendingEdges,
     pendingBatchEdges,
+    pendingMoves,
     removedEdges,
     removedBatchEdges,
     findIssueIdByNumber,
@@ -477,6 +554,7 @@ export function ElkCanvas({
     setPendingBatchEdges([]);
     setRemovedBatchEdges(new Set());
     setEditModeSourceBatch(null);
+    setPendingMoves([]);
   }, []);
 
   // Refs
@@ -567,8 +645,37 @@ export function ElkCanvas({
       }
     }
 
+    // Apply pending moves - move tasks between batches
+    for (const move of pendingMoves) {
+      // Find source batch and remove the task
+      const sourceBatch = clonedEpic.batches.find(
+        (b) => b.number === move.fromBatchNumber,
+      );
+      const targetBatch = clonedEpic.batches.find(
+        (b) => b.number === move.toBatchNumber,
+      );
+
+      if (sourceBatch && targetBatch) {
+        const taskIndex = sourceBatch.tasks.findIndex(
+          (t) => t.number === move.taskNumber,
+        );
+        if (taskIndex !== -1) {
+          // Remove from source batch and add to target batch
+          const [task] = sourceBatch.tasks.splice(taskIndex, 1);
+          targetBatch.tasks.push(task);
+        }
+      }
+    }
+
     return clonedEpic;
-  }, [epic, pendingEdges, removedEdges, pendingBatchEdges, removedBatchEdges]);
+  }, [
+    epic,
+    pendingEdges,
+    removedEdges,
+    pendingBatchEdges,
+    removedBatchEdges,
+    pendingMoves,
+  ]);
 
   // Calculate layout when epic or modifications change
   useEffect(() => {
@@ -649,18 +756,18 @@ export function ElkCanvas({
   }, []);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isPanning.current) return;
+    if (isPanning.current) {
+      const dx = e.clientX - lastMousePos.current.x;
+      const dy = e.clientY - lastMousePos.current.y;
 
-    const dx = e.clientX - lastMousePos.current.x;
-    const dy = e.clientY - lastMousePos.current.y;
+      setTransform((prev) => ({
+        ...prev,
+        x: prev.x + dx,
+        y: prev.y + dy,
+      }));
 
-    setTransform((prev) => ({
-      ...prev,
-      x: prev.x + dx,
-      y: prev.y + dy,
-    }));
-
-    lastMousePos.current = { x: e.clientX, y: e.clientY };
+      lastMousePos.current = { x: e.clientX, y: e.clientY };
+    }
   }, []);
 
   const handleMouseUp = useCallback(() => {
@@ -864,51 +971,54 @@ export function ElkCanvas({
   // Handle batch click - starts or completes a batch relationship
   const handleBatchClick = useCallback(
     (batchNumber: number) => {
-      if (isEditMode) {
-        // Clear any task source selection when clicking a batch
-        setEditModeSourceTask(null);
+      // Synthetic batches (number <= 0) can't have dependencies edited
+      if (!isEditMode || batchNumber <= 0) {
+        return;
+      }
 
-        if (editModeSourceBatch === batchNumber) {
-          // Clicked same batch - deselect
+      // Clear any task source selection when clicking a batch
+      setEditModeSourceTask(null);
+
+      if (editModeSourceBatch === batchNumber) {
+        // Clicked same batch - deselect
+        setEditModeSourceBatch(null);
+      } else if (editModeSourceBatch === null) {
+        // First click - select source batch
+        setEditModeSourceBatch(batchNumber);
+      } else {
+        // Second click on different batch - complete the relationship
+        const edgeId = `batch-edge-${editModeSourceBatch}-${batchNumber}`;
+
+        // Check if this edge was previously removed - if so, undo the removal
+        if (removedBatchEdges.has(edgeId)) {
+          setRemovedBatchEdges((prev) => {
+            const next = new Set(prev);
+            next.delete(edgeId);
+            return next;
+          });
           setEditModeSourceBatch(null);
-        } else if (editModeSourceBatch === null) {
-          // First click - select source batch
-          setEditModeSourceBatch(batchNumber);
-        } else {
-          // Second click on different batch - complete the relationship
-          const edgeId = `batch-edge-${editModeSourceBatch}-${batchNumber}`;
-
-          // Check if this edge was previously removed - if so, undo the removal
-          if (removedBatchEdges.has(edgeId)) {
-            setRemovedBatchEdges((prev) => {
-              const next = new Set(prev);
-              next.delete(edgeId);
-              return next;
-            });
-            setEditModeSourceBatch(null);
-            return;
-          }
-
-          // Check if this edge already exists or is pending
-          const existingEdge = layout?.edges.find(
-            (e) =>
-              e.from === editModeSourceBatch &&
-              e.to === batchNumber &&
-              e.isBatchEdge,
-          );
-          const pendingExists = pendingBatchEdges.some(
-            (e) => e.from === editModeSourceBatch && e.to === batchNumber,
-          );
-
-          if (!existingEdge && !pendingExists) {
-            setPendingBatchEdges((prev) => [
-              ...prev,
-              { from: editModeSourceBatch, to: batchNumber },
-            ]);
-          }
-          // Clear source selection
-          setEditModeSourceBatch(null);
+          return;
         }
+
+        // Check if this edge already exists or is pending
+        const existingEdge = layout?.edges.find(
+          (e) =>
+            e.from === editModeSourceBatch &&
+            e.to === batchNumber &&
+            e.isBatchEdge,
+        );
+        const pendingExists = pendingBatchEdges.some(
+          (e) => e.from === editModeSourceBatch && e.to === batchNumber,
+        );
+
+        if (!existingEdge && !pendingExists) {
+          setPendingBatchEdges((prev) => [
+            ...prev,
+            { from: editModeSourceBatch, to: batchNumber },
+          ]);
+        }
+        // Clear source selection
+        setEditModeSourceBatch(null);
       }
     },
     [
@@ -925,7 +1035,157 @@ export function ElkCanvas({
     setActiveTool(tool);
     setEditModeSourceTask(null);
     setEditModeSourceBatch(null);
+    setDraggingTask(null);
+    setDropTargetBatch(null);
   }, []);
+
+  // Helper to find which batch a task belongs to
+  const findTaskBatch = useCallback(
+    (taskNumber: number): number | null => {
+      for (const batch of epic.batches) {
+        if (batch.tasks.some((t) => t.number === taskNumber)) {
+          return batch.number;
+        }
+      }
+      return null;
+    },
+    [epic],
+  );
+
+  // Handle drag start on a task
+  const handleTaskDragStart = useCallback(
+    (taskNumber: number) => {
+      if (!isMoveMode) return;
+      const sourceBatchNumber = findTaskBatch(taskNumber);
+      if (sourceBatchNumber === null) return;
+
+      // Get the actual GitHub issue ID for the task
+      const taskId = findIssueIdByNumber(taskNumber);
+      if (taskId === null) return;
+
+      setDraggingTask({ taskNumber, taskId, sourceBatchNumber });
+    },
+    [isMoveMode, findTaskBatch, findIssueIdByNumber],
+  );
+
+  // Handle drag end (cancelled or completed)
+  const handleTaskDragEnd = useCallback(() => {
+    setDraggingTask(null);
+    setDropTargetBatch(null);
+  }, []);
+
+  // Handle drop on a batch - queue the move for later save
+  const handleBatchDrop = useCallback(
+    (batchNumber: number) => {
+      if (!draggingTask) {
+        handleTaskDragEnd();
+        return;
+      }
+
+      // Don't allow dropping on the same batch
+      if (batchNumber === draggingTask.sourceBatchNumber) {
+        handleTaskDragEnd();
+        return;
+      }
+
+      // Don't allow dropping on synthetic batches
+      if (batchNumber <= 0) {
+        handleTaskDragEnd();
+        return;
+      }
+
+      // Check if there's already a pending move for this task
+      const existingMoveIndex = pendingMoves.findIndex(
+        (m) => m.taskNumber === draggingTask.taskNumber,
+      );
+
+      if (existingMoveIndex !== -1) {
+        // Update existing pending move
+        setPendingMoves((prev) => {
+          const updated = [...prev];
+          updated[existingMoveIndex] = {
+            ...updated[existingMoveIndex],
+            toBatchNumber: batchNumber,
+          };
+          // If moving back to original batch, remove the pending move
+          if (batchNumber === updated[existingMoveIndex].fromBatchNumber) {
+            updated.splice(existingMoveIndex, 1);
+          }
+          return updated;
+        });
+      } else {
+        // Add new pending move
+        setPendingMoves((prev) => [
+          ...prev,
+          {
+            taskNumber: draggingTask.taskNumber,
+            taskId: draggingTask.taskId,
+            fromBatchNumber: draggingTask.sourceBatchNumber,
+            toBatchNumber: batchNumber,
+          },
+        ]);
+      }
+
+      handleTaskDragEnd();
+    },
+    [draggingTask, handleTaskDragEnd, pendingMoves],
+  );
+
+  // Cancel a pending move
+  const handleCancelMove = useCallback((taskNumber: number) => {
+    setPendingMoves((prev) => prev.filter((m) => m.taskNumber !== taskNumber));
+  }, []);
+
+  // Track mouse position to update drop target
+  const handleCanvasMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      // Also handle panning
+      if (isPanning.current) {
+        const dx = e.clientX - lastMousePos.current.x;
+        const dy = e.clientY - lastMousePos.current.y;
+        lastMousePos.current = { x: e.clientX, y: e.clientY };
+        setTransform((prev) => ({
+          ...prev,
+          x: prev.x + dx,
+          y: prev.y + dy,
+        }));
+        return;
+      }
+
+      // Update drop target based on mouse position when dragging
+      if (!isMoveMode || !draggingTask || !layout) return;
+
+      const container = containerRef.current;
+      if (!container) return;
+
+      const rect = container.getBoundingClientRect();
+      const mouseX = (e.clientX - rect.left - transform.x) / transform.scale;
+      const mouseY = (e.clientY - rect.top - transform.y) / transform.scale;
+
+      // Find which batch the mouse is over
+      let foundBatch: number | null = null;
+      for (const batch of layout.batches) {
+        if (
+          mouseX >= batch.x &&
+          mouseX <= batch.x + batch.width &&
+          mouseY >= batch.y &&
+          mouseY <= batch.y + batch.height
+        ) {
+          // Don't allow dropping on synthetic batches or the source batch
+          if (
+            batch.batchNumber > 0 &&
+            batch.batchNumber !== draggingTask.sourceBatchNumber
+          ) {
+            foundBatch = batch.batchNumber;
+          }
+          break;
+        }
+      }
+
+      setDropTargetBatch(foundBatch);
+    },
+    [isMoveMode, draggingTask, layout, transform],
+  );
 
   // Get filtered edges (excluding removed ones)
   const visibleEdges = useMemo(() => {
@@ -994,22 +1254,25 @@ export function ElkCanvas({
       style={{ cursor: cursorStyle }}
     >
       {/* Controls */}
-      <div className="absolute top-4 right-4 z-10 flex gap-2">
-        <button
-          onClick={handleFitToView}
-          className="px-3 py-1.5 text-xs font-medium bg-card border border-border rounded-md hover:bg-muted transition-colors"
-        >
-          Fit
-        </button>
-        <button
-          onClick={handleResetView}
-          className="px-3 py-1.5 text-xs font-medium bg-card border border-border rounded-md hover:bg-muted transition-colors"
-        >
-          Reset
-        </button>
-        <span className="px-3 py-1.5 text-xs font-medium bg-card border border-border rounded-md">
-          {Math.round(transform.scale * 100)}%
-        </span>
+      <div className="absolute top-4 right-4 z-10 flex-col gap-2">
+        <div className="flex gap-2 mb-2">
+          <button
+            onClick={handleFitToView}
+            className="px-3 py-1.5 text-xs font-medium bg-card border border-border rounded-md hover:bg-muted transition-colors"
+          >
+            Fit
+          </button>
+          <button
+            onClick={handleResetView}
+            className="px-3 py-1.5 text-xs font-medium bg-card border border-border rounded-md hover:bg-muted transition-colors"
+          >
+            Reset
+          </button>
+          <span className="px-3 py-1.5 text-xs font-medium bg-card border border-border rounded-md">
+            {Math.round(transform.scale * 100)}%
+          </span>
+        </div>
+        <StatusLegend />
       </div>
 
       {/* Bottom Toolbar */}
@@ -1031,7 +1294,7 @@ export function ElkCanvas({
             >
               {isSaving ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <SyncIcon size={16} className="animate-spin" />
                   Saving...
                 </>
               ) : !api ? (
@@ -1067,6 +1330,41 @@ export function ElkCanvas({
         </div>
       )}
 
+      {/* Move mode hint */}
+      {isMoveMode && (
+        <div className="absolute top-4 left-4 z-10 px-3 py-1.5 text-xs font-medium bg-card border border-border rounded-md">
+          {draggingTask !== null ? (
+            <span className="text-blue-500">
+              Drag to a batch to move issue #{draggingTask.taskNumber}, release
+              outside to cancel
+            </span>
+          ) : pendingMoves.filter((m) => !committedMoves.has(m.taskNumber))
+              .length > 0 ? (
+            <span className="text-blue-500">
+              {
+                pendingMoves.filter((m) => !committedMoves.has(m.taskNumber))
+                  .length
+              }{" "}
+              move
+              {pendingMoves.filter((m) => !committedMoves.has(m.taskNumber))
+                .length > 1
+                ? "s"
+                : ""}{" "}
+              queued. Click Save to apply or click X on tasks to cancel.
+            </span>
+          ) : committedMoves.size > 0 ? (
+            <span className="text-green-500">
+              {committedMoves.size} move{committedMoves.size > 1 ? "s" : ""}{" "}
+              saved. Waiting for refresh...
+            </span>
+          ) : (
+            <span className="text-muted-foreground">
+              Click and drag a task to move it to another batch
+            </span>
+          )}
+        </div>
+      )}
+
       {/* SVG Canvas */}
       <svg
         width={layout.canvasWidth}
@@ -1077,6 +1375,15 @@ export function ElkCanvas({
           transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
           transformOrigin: "0 0",
         }}
+        onMouseMove={handleCanvasMouseMove}
+        onMouseUp={() => {
+          if (draggingTask && dropTargetBatch) {
+            handleBatchDrop(dropTargetBatch);
+          } else {
+            handleTaskDragEnd();
+          }
+        }}
+        onMouseLeave={handleTaskDragEnd}
       >
         {/* Definitions */}
         <defs>
@@ -1191,7 +1498,10 @@ export function ElkCanvas({
             isHighlighted={relatedTasks.size > 0}
             isEditMode={isEditMode}
             isEditModeSelected={editModeSourceBatch === batch.batchNumber}
+            isMoveMode={isMoveMode}
+            isDropTarget={dropTargetBatch === batch.batchNumber}
             onClick={handleBatchClick}
+            onDrop={handleBatchDrop}
           />
         ))}
 
@@ -1207,27 +1517,53 @@ export function ElkCanvas({
         />
 
         {/* Task nodes */}
-        {layout.tasks.map((task) => (
-          <ElkTaskNode
-            key={task.id}
-            task={task}
-            isHighlighted={!isEditMode && highlightedTask === task.taskNumber}
-            isRelated={
-              !isEditMode &&
-              relatedTasks.has(task.taskNumber) &&
-              highlightedTask !== task.taskNumber
-            }
-            isDimmed={
-              !isEditMode &&
-              highlightedTask !== null &&
-              !relatedTasks.has(task.taskNumber)
-            }
-            isEditModeSelected={editModeSourceTask === task.taskNumber}
-            isEditMode={isEditMode}
-            onHover={setHighlightedTask}
-            onClick={handleTaskClick}
-          />
-        ))}
+        {layout.tasks.map((task) => {
+          const pendingMoveForTask = pendingMoves.find(
+            (m) => m.taskNumber === task.taskNumber,
+          );
+          return (
+            <ElkTaskNode
+              key={task.id}
+              task={task}
+              isHighlighted={
+                !isEditMode &&
+                !isMoveMode &&
+                highlightedTask === task.taskNumber
+              }
+              isRelated={
+                !isEditMode &&
+                !isMoveMode &&
+                relatedTasks.has(task.taskNumber) &&
+                highlightedTask !== task.taskNumber
+              }
+              isDimmed={
+                !isEditMode &&
+                !isMoveMode &&
+                highlightedTask !== null &&
+                !relatedTasks.has(task.taskNumber)
+              }
+              isEditModeSelected={editModeSourceTask === task.taskNumber}
+              isEditMode={isEditMode}
+              isMoveMode={isMoveMode}
+              isDragging={draggingTask?.taskNumber === task.taskNumber}
+              pendingMove={
+                pendingMoveForTask
+                  ? {
+                      fromBatchNumber: pendingMoveForTask.fromBatchNumber,
+                      isCommitted: committedMoves.has(
+                        pendingMoveForTask.taskNumber,
+                      ),
+                    }
+                  : null
+              }
+              onHover={setHighlightedTask}
+              onClick={handleTaskClick}
+              onDragStart={handleTaskDragStart}
+              onDragEnd={handleTaskDragEnd}
+              onCancelMove={handleCancelMove}
+            />
+          );
+        })}
       </svg>
     </div>
   );

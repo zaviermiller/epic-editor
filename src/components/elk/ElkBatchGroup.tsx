@@ -3,6 +3,7 @@
  *
  * Renders a batch (group) container in the SVG canvas.
  * Shows a dashed border box with header containing batch title and progress.
+ * Supports being a drop target for moving issues between batches.
  */
 
 "use client";
@@ -18,12 +19,21 @@ interface ElkBatchGroupProps {
   isEditMode?: boolean;
   /** Whether this batch is selected as source in edit mode */
   isEditModeSelected?: boolean;
+  /** Whether move-issue mode is active */
+  isMoveMode?: boolean;
+  /** Whether this batch is a valid drop target (has a task being dragged over it) */
+  isDropTarget?: boolean;
   /** Called when batch is clicked in edit mode */
   onClick?: (batchNumber: number) => void;
+  /** Called when a task is dropped on this batch */
+  onDrop?: (batchNumber: number) => void;
 }
 
 // Connection+ cursor as a data URI (link icon with plus)
 const connectionCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2322c55e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/%3E%3Cpath d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/%3E%3Ccircle cx='19' cy='5' r='4' fill='%2322c55e' stroke='none'/%3E%3Cpath d='M19 3v4M17 5h4' stroke='white' stroke-width='1.5'/%3E%3C/svg%3E") 12 12, pointer`;
+
+// Drop target cursor
+const dropTargetCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 5v14'/%3E%3Cpath d='M5 12h14'/%3E%3C/svg%3E") 12 12, copy`;
 
 /**
  * Get header background color based on status
@@ -46,7 +56,10 @@ export function ElkBatchGroup({
   isHighlighted,
   isEditMode = false,
   isEditModeSelected = false,
+  isMoveMode = false,
+  isDropTarget = false,
   onClick,
+  onDrop,
 }: ElkBatchGroupProps) {
   const [isHovered, setIsHovered] = useState(false);
   const headerBg = getHeaderBgColor(batch.status);
@@ -55,15 +68,20 @@ export function ElkBatchGroup({
   const cornerRadius = 12;
   const ringOffset = 4;
 
+  // Synthetic batches (number <= 0) can't have dependencies edited or receive drops
+  const isSyntheticBatch = batch.batchNumber <= 0;
+  const canEditDependencies = isEditMode && !isSyntheticBatch;
+  const canReceiveDrop = isMoveMode && !isSyntheticBatch;
+
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isEditMode && onClick) {
+    if (canEditDependencies && onClick) {
       onClick(batch.batchNumber);
     }
   };
 
   const handleMouseEnter = () => {
-    if (isEditMode) {
+    if (canEditDependencies || canReceiveDrop) {
       setIsHovered(true);
     }
   };
@@ -72,15 +90,37 @@ export function ElkBatchGroup({
     setIsHovered(false);
   };
 
+  // Handle mouse up for drop target (completing a drag-and-drop)
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (canReceiveDrop && isDropTarget && onDrop) {
+      e.stopPropagation();
+      onDrop(batch.batchNumber);
+    }
+  };
+
   // Determine border color and width
   let borderColor = "rgb(107 114 128)"; // gray-500
   let borderWidth = 1;
-  if (isEditModeSelected) {
+  if (isDropTarget && canReceiveDrop) {
+    borderColor = "#3b82f6"; // blue-500
+    borderWidth = 3;
+  } else if (isEditModeSelected && !isSyntheticBatch) {
     borderColor = "#22c55e"; // green-500
     borderWidth = 2;
-  } else if (isEditMode && isHovered) {
+  } else if (canEditDependencies && isHovered) {
     borderColor = "#60a5fa"; // blue-400
     borderWidth = 2;
+  } else if (canReceiveDrop && isHovered) {
+    borderColor = "#60a5fa"; // blue-400
+    borderWidth = 2;
+  }
+
+  // Determine cursor
+  let cursor = "default";
+  if (canEditDependencies) {
+    cursor = connectionCursor;
+  } else if (canReceiveDrop && isDropTarget) {
+    cursor = dropTargetCursor;
   }
 
   return (
@@ -88,13 +128,14 @@ export function ElkBatchGroup({
       className="elk-batch-group"
       style={{
         transition: "transform 300ms ease-out",
-        cursor: isEditMode ? connectionCursor : "default",
+        cursor,
       }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      onMouseUp={handleMouseUp}
     >
       {/* Edit mode selection ring (pulsing animation) */}
-      {isEditModeSelected && (
+      {isEditModeSelected && !isSyntheticBatch && (
         <rect
           x={batch.x - ringOffset - 1}
           y={batch.y - ringOffset - 1}
@@ -104,6 +145,22 @@ export function ElkBatchGroup({
           ry={cornerRadius + ringOffset + 1}
           fill="none"
           stroke="#22c55e"
+          strokeWidth={3}
+          className="pointer-events-none animate-pulse"
+        />
+      )}
+
+      {/* Drop target ring (blue, pulsing) */}
+      {isDropTarget && canReceiveDrop && (
+        <rect
+          x={batch.x - ringOffset - 1}
+          y={batch.y - ringOffset - 1}
+          width={batch.width + (ringOffset + 1) * 2}
+          height={batch.height + (ringOffset + 1) * 2}
+          rx={cornerRadius + ringOffset + 1}
+          ry={cornerRadius + ringOffset + 1}
+          fill="none"
+          stroke="#3b82f6"
           strokeWidth={3}
           className="pointer-events-none animate-pulse"
         />
@@ -135,9 +192,9 @@ export function ElkBatchGroup({
         rx={cornerRadius}
         ry={cornerRadius}
         fill={
-          isEditModeSelected
+          isEditModeSelected && !isSyntheticBatch
             ? "#22c55e30"
-            : isHovered && isEditMode
+            : isHovered && canEditDependencies
               ? "#60a5fa20"
               : headerBg
         }
@@ -152,11 +209,12 @@ export function ElkBatchGroup({
         x2={batch.x + batch.width}
         y2={batch.y + headerHeight}
         style={{
-          stroke: isEditModeSelected
-            ? "#22c55e"
-            : isHovered && isEditMode
-              ? "#60a5fa"
-              : "rgb(75 85 99)",
+          stroke:
+            isEditModeSelected && !isSyntheticBatch
+              ? "#22c55e"
+              : isHovered && canEditDependencies
+                ? "#60a5fa"
+                : "rgb(75 85 99)",
           strokeWidth: 1,
         }}
       />
@@ -178,7 +236,8 @@ export function ElkBatchGroup({
         className="fill-muted-foreground pointer-events-none"
         style={{ fontSize: "11px" }}
       >
-        #{batch.batchNumber} • {batch.progress}% complete
+        {isSyntheticBatch ? "" : `#${batch.batchNumber} • `}
+        {batch.progress}% complete
       </text>
 
       {/* Progress bar background */}

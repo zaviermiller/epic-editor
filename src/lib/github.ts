@@ -367,6 +367,62 @@ export class GitHubApi {
   }
 
   /**
+   * Add a sub-issue to a parent issue
+   *
+   * API: POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues
+   * Docs: https://docs.github.com/en/rest/issues/sub-issues#add-sub-issue
+   *
+   * @param owner - Repository owner
+   * @param repo - Repository name
+   * @param parentIssueNumber - The issue number of the parent issue
+   * @param subIssueId - The ID (not number) of the issue to add as a sub-issue
+   * @param replaceParent - Whether to replace the current parent (default: true for moving between batches)
+   * @returns The added sub-issue data
+   */
+  async addSubIssue(
+    owner: string,
+    repo: string,
+    parentIssueNumber: number,
+    subIssueId: number,
+    replaceParent: boolean = true,
+  ): Promise<GitHubIssue> {
+    return this.request<GitHubIssue>(
+      `/repos/${owner}/${repo}/issues/${parentIssueNumber}/sub_issues`,
+      {
+        method: "POST",
+        body: { sub_issue_id: subIssueId, replace_parent: replaceParent },
+      },
+    );
+  }
+
+  /**
+   * Remove a sub-issue from a parent issue
+   *
+   * API: DELETE /repos/{owner}/{repo}/issues/{issue_number}/sub_issue
+   * Docs: https://docs.github.com/en/rest/issues/sub-issues#remove-sub-issue
+   *
+   * @param owner - Repository owner
+   * @param repo - Repository name
+   * @param parentIssueNumber - The issue number of the parent issue
+   * @param subIssueId - The ID (not number) of the sub-issue to remove
+   * @returns The removed sub-issue data
+   */
+  async removeSubIssue(
+    owner: string,
+    repo: string,
+    parentIssueNumber: number,
+    subIssueId: number,
+  ): Promise<GitHubIssue> {
+    return this.request<GitHubIssue>(
+      `/repos/${owner}/${repo}/issues/${parentIssueNumber}/sub_issue`,
+      {
+        method: "DELETE",
+        body: { sub_issue_id: subIssueId },
+      },
+    );
+  }
+
+  /**
    * Get the authenticated user
    */
   async getAuthenticatedUser(): Promise<GitHubUser | null> {
@@ -655,10 +711,15 @@ export function buildEpic(
  *
  * This is the main entry point for loading an Epic hierarchy.
  *
- * Hierarchy:
+ * Dynamic Hierarchy:
  * - Epic (parent issue)
- *   - Batches (direct sub-issues of the Epic)
- *     - Tasks (sub-issues of each Batch)
+ *   - Sub-issues with children → Batches (contain tasks)
+ *   - Sub-issues without children → Tasks (grouped in synthetic "Tasks" batch)
+ *
+ * This approach dynamically determines what is a "batch" vs a "task":
+ * - If a sub-issue has its own sub-issues, it becomes a Batch
+ * - If a sub-issue has no sub-issues, it becomes a Task
+ * - For nested sub-issues, we only go 1 level deep (tasks within batches don't recurse)
  *
  * Dependencies are fetched using the blocked_by API for each issue.
  */
@@ -671,12 +732,15 @@ export async function fetchEpicHierarchy(
   // Fetch the epic issue
   const epicIssue = await api.getIssue(owner, repo, issueNumber);
 
-  // Fetch sub-issues of the epic (these are the batches)
-  const batchIssues = await api.getAllSubIssues(owner, repo, issueNumber);
+  // Fetch all direct sub-issues of the epic
+  const directSubIssues = await api.getAllSubIssues(owner, repo, issueNumber);
 
   // Build batches with their tasks
   const batches: Batch[] = [];
   const allDependencies: Dependency[] = [];
+
+  // Collect standalone tasks (sub-issues with no children)
+  const standaloneTasks: Task[] = [];
 
   // Fetch epic-level dependencies
   const epicBlockedBy = await api.getAllBlockedByDependencies(
@@ -692,52 +756,87 @@ export async function fetchEpicHierarchy(
     });
   }
 
-  for (const batchIssue of batchIssues) {
-    // Fetch sub-issues of the batch (these are the tasks)
-    const taskIssues = await api.getAllSubIssues(
-      owner,
-      repo,
-      batchIssue.number,
-    );
+  // Process each direct sub-issue to determine if it's a batch or task
+  for (const subIssue of directSubIssues) {
+    // Fetch sub-issues to determine if this is a batch (has children) or task (no children)
+    const childIssues = await api.getAllSubIssues(owner, repo, subIssue.number);
 
-    // Fetch batch-level dependencies
-    const batchBlockedBy = await api.getAllBlockedByDependencies(
+    // Fetch dependencies for this issue
+    const subIssueBlockedBy = await api.getAllBlockedByDependencies(
       owner,
       repo,
-      batchIssue.number,
+      subIssue.number,
     );
-    for (const dep of batchBlockedBy) {
+    for (const dep of subIssueBlockedBy) {
       allDependencies.push({
-        from: batchIssue.number,
+        from: subIssue.number,
         to: dep.number,
         type: "depends-on",
       });
     }
 
-    // Build tasks with their dependencies
-    const tasks: Task[] = [];
-    for (const taskIssue of taskIssues) {
-      // Fetch task-level dependencies
-      const taskBlockedBy = await api.getAllBlockedByDependencies(
-        owner,
-        repo,
-        taskIssue.number,
-      );
+    if (childIssues.length > 0) {
+      // This sub-issue has children → treat as a Batch
+      // Its children become Tasks (only 1 level deep - we don't recurse further)
+      const tasks: Task[] = [];
 
-      for (const dep of taskBlockedBy) {
-        allDependencies.push({
-          from: taskIssue.number,
-          to: dep.number,
-          type: "depends-on",
-        });
+      for (const childIssue of childIssues) {
+        // Fetch task-level dependencies
+        const taskBlockedBy = await api.getAllBlockedByDependencies(
+          owner,
+          repo,
+          childIssue.number,
+        );
+
+        for (const dep of taskBlockedBy) {
+          allDependencies.push({
+            from: childIssue.number,
+            to: dep.number,
+            type: "depends-on",
+          });
+        }
+
+        const task = issueToTask(childIssue, taskBlockedBy);
+        tasks.push(task);
       }
 
-      const task = issueToTask(taskIssue, taskBlockedBy);
-      tasks.push(task);
+      const batch = issueToBatch(subIssue, tasks, subIssueBlockedBy);
+      batches.push(batch);
+    } else {
+      // This sub-issue has no children → treat as a standalone Task
+      const task = issueToTask(subIssue, subIssueBlockedBy);
+      standaloneTasks.push(task);
     }
+  }
 
-    const batch = issueToBatch(batchIssue, tasks, batchBlockedBy);
-    batches.push(batch);
+  // If there are standalone tasks, create a synthetic batch to contain them
+  // This ensures they are displayed properly in the visualization
+  if (standaloneTasks.length > 0) {
+    const syntheticBatch: Batch = {
+      id: -1, // Synthetic ID (negative to avoid conflicts)
+      number: -1, // Synthetic number
+      title: "Tasks",
+      body: null,
+      status: standaloneTasks.every((t) => t.status === "done")
+        ? "done"
+        : standaloneTasks.some(
+              (t) => t.status === "in-progress" || t.status === "done",
+            )
+          ? "in-progress"
+          : "planned",
+      url: epicIssue.html_url,
+      labels: [],
+      assignees: [],
+      tasks: standaloneTasks,
+      dependsOn: [],
+      progress: Math.round(
+        (standaloneTasks.filter((t) => t.status === "done").length /
+          standaloneTasks.length) *
+          100,
+      ),
+    };
+    // Add synthetic batch at the beginning so it appears first
+    batches.unshift(syntheticBatch);
   }
 
   return buildEpic(epicIssue, owner, repo, batches, allDependencies);

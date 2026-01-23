@@ -31,6 +31,8 @@ interface TaskCardProps {
   onHover?: (taskNumber: number | null) => void;
   /** Callback when the card is clicked */
   onClick?: (task: Task) => void;
+  /** Callback when drag starts on this card */
+  onDragStart?: (task: Task, e: React.MouseEvent) => void;
   /** Fixed width for canvas rendering (allows height to expand for content) */
   fixedWidth?: number;
 }
@@ -73,6 +75,7 @@ export function TaskCard({
   isRelated = false,
   onHover,
   onClick,
+  onDragStart,
   fixedWidth,
 }: TaskCardProps) {
   const bgColor = getStatusBgColor(task.status);
@@ -100,11 +103,22 @@ export function TaskCard({
               ${isHighlighted ? "ring-2 ring-white ring-offset-2 ring-offset-background scale-[1.02] shadow-lg" : ""}
               ${isRelated ? "ring-2 ring-blue-400 ring-offset-1 ring-offset-background" : ""}
               ${fixedWidth ? "" : "w-full"}
+              ${onDragStart ? "cursor-grab active:cursor-grabbing" : ""}
             `}
             style={dimensionStyle}
             onMouseEnter={() => onHover?.(task.number)}
             onMouseLeave={() => onHover?.(null)}
-            onClick={() => onClick?.(task)}
+            onClick={(e) => {
+              // Don't trigger click if we were dragging
+              if (!e.defaultPrevented) {
+                onClick?.(task);
+              }
+            }}
+            onMouseDown={(e) => {
+              if (onDragStart && e.button === 0) {
+                onDragStart(task, e);
+              }
+            }}
             data-task-id={task.number}
           >
             <div className="break-words">{task.title}</div>

@@ -12,7 +12,12 @@
 
 import { Badge } from "@/components/ui/badge";
 import { IssueStatus } from "@/types";
-import { CheckCircle2, Circle, CircleDot, CircleSlash } from "lucide-react";
+import {
+  CheckCircleFillIcon,
+  IssueOpenedIcon,
+  DotFillIcon,
+  SkipIcon,
+} from "@primer/octicons-react";
 
 interface StatusBadgeProps {
   status: IssueStatus;
@@ -25,13 +30,13 @@ interface StatusBadgeProps {
 function getStatusIcon(status: IssueStatus) {
   switch (status) {
     case "done":
-      return <CheckCircle2 className="h-3 w-3" />;
+      return <CheckCircleFillIcon size={12} />;
     case "in-progress":
-      return <CircleDot className="h-3 w-3" />;
+      return <DotFillIcon size={12} />;
     case "planned":
-      return <Circle className="h-3 w-3" />;
+      return <IssueOpenedIcon size={12} />;
     case "not-planned":
-      return <CircleSlash className="h-3 w-3" />;
+      return <SkipIcon size={12} />;
   }
 }
 

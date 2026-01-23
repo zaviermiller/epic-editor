@@ -11,7 +11,7 @@ import { useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { isValidGitHubUrl, parseGitHubUrl } from "@/lib/github";
-import { Link, Loader2, AlertCircle } from "lucide-react";
+import { LinkIcon, SyncIcon, AlertIcon } from "@primer/octicons-react";
 import { RepoInfo } from "@/types";
 
 interface EpicInputProps {
@@ -89,7 +89,7 @@ export function EpicInput({
       <div className="flex gap-2">
         <div className="relative flex-1">
           <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-            <Link className="h-4 w-4" />
+            <LinkIcon size={16} />
           </div>
           <Input
             type="text"
@@ -107,7 +107,7 @@ export function EpicInput({
         >
           {isLoading ? (
             <>
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              <SyncIcon size={16} className="animate-spin mr-2" />
               Loading
             </>
           ) : (
@@ -118,7 +118,7 @@ export function EpicInput({
 
       {error && (
         <div className="flex items-center gap-2 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4" />
+          <AlertIcon size={16} />
           {error}
         </div>
       )}

@@ -14,16 +14,16 @@ import { SaveResult } from "@/components/elk/ElkCanvas";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import {
-  Github,
-  ArrowLeft,
-  Loader2,
-  AlertCircle,
-  Star,
-  RefreshCw,
-  ExternalLink,
-  CheckCircle2,
-  XCircle,
-} from "lucide-react";
+  MarkGithubIcon,
+  ArrowLeftIcon,
+  SyncIcon,
+  AlertIcon,
+  StarIcon,
+  StarFillIcon,
+  LinkExternalIcon,
+  CheckCircleFillIcon,
+  XCircleIcon,
+} from "@primer/octicons-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Epic, Task, LoadingState, ApiError } from "@/types";
 import { GitHubApi, fetchEpicHierarchy } from "@/lib/github";
@@ -59,7 +59,7 @@ function ErrorDisplay({
   return (
     <Card className="border-destructive/50 bg-destructive/10 max-w-lg mx-auto mt-8">
       <CardContent className="flex flex-col items-center gap-4 p-6">
-        <AlertCircle className="h-12 w-12 text-destructive" />
+        <AlertIcon size={48} className="text-destructive" />
         <div className="text-center">
           <h3 className="font-semibold text-destructive text-lg">
             Error Loading Epic
@@ -102,9 +102,15 @@ function SaveToast({
     >
       <div className="flex items-start gap-3">
         {result.success ? (
-          <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0" />
+          <CheckCircleFillIcon
+            size={20}
+            className="text-green-600 dark:text-green-400 shrink-0"
+          />
         ) : (
-          <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0" />
+          <XCircleIcon
+            size={20}
+            className="text-red-600 dark:text-red-400 shrink-0"
+          />
         )}
         <div className="flex-1">
           <p
@@ -323,7 +329,7 @@ export default function VisPage({ params }: VisPageProps) {
                 onClick={handleGoHome}
                 className="shrink-0"
               >
-                <ArrowLeft className="h-4 w-4" />
+                <ArrowLeftIcon size={16} />
               </Button>
 
               {/* Epic title and link */}
@@ -342,12 +348,12 @@ export default function VisPage({ params }: VisPageProps) {
                     className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
                     title="Open in GitHub"
                   >
-                    <ExternalLink className="h-4 w-4" />
+                    <LinkExternalIcon size={16} />
                   </a>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <Github className="h-5 w-5 text-primary" />
+                  <MarkGithubIcon size={20} className="text-primary" />
                   <span className="text-lg font-semibold">Epic Visualizer</span>
                 </div>
               )}
@@ -364,8 +370,9 @@ export default function VisPage({ params }: VisPageProps) {
                       onClick={handleRefresh}
                       disabled={loadingState === "loading" || isRefreshing}
                     >
-                      <RefreshCw
-                        className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+                      <SyncIcon
+                        size={16}
+                        className={isRefreshing ? "animate-spin" : ""}
                       />
                     </Button>
                   )}
@@ -376,9 +383,11 @@ export default function VisPage({ params }: VisPageProps) {
                       onClick={handleToggleFavorite}
                       className={isFavorited ? "text-yellow-500" : ""}
                     >
-                      <Star
-                        className={`h-4 w-4 ${isFavorited ? "fill-current" : ""}`}
-                      />
+                      {isFavorited ? (
+                        <StarFillIcon size={16} />
+                      ) : (
+                        <StarIcon size={16} />
+                      )}
                     </Button>
                   )}
                 </>
@@ -396,7 +405,7 @@ export default function VisPage({ params }: VisPageProps) {
                 </div>
               ) : (
                 <Button variant="outline" size="sm" onClick={signIn}>
-                  <Github className="h-4 w-4 mr-2" />
+                  <MarkGithubIcon size={16} className="mr-2" />
                   Sign in with GitHub
                 </Button>
               )}
@@ -410,7 +419,7 @@ export default function VisPage({ params }: VisPageProps) {
         {/* Loading state */}
         {loadingState === "loading" && (
           <div className="flex-1 flex flex-col items-center justify-center py-16">
-            <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+            <SyncIcon size={48} className="animate-spin text-primary mb-4" />
             <p className="text-muted-foreground">Loading Epic hierarchy...</p>
             <p className="text-xs text-muted-foreground mt-1">
               {owner}/{repo}#{issue}
@@ -433,8 +442,8 @@ export default function VisPage({ params }: VisPageProps) {
         {epic && loadingState === "success" && (
           <div className="flex-1 min-h-0 h-full relative">
             {isRefreshing && (
-              <div className="absolute top-4 right-4 z-30 bg-background/80 rounded-full px-3 py-1 flex items-center gap-2 text-sm text-muted-foreground">
-                <RefreshCw className="h-3 w-3 animate-spin" />
+              <div className="absolute top-4 right-48 z-30 bg-background/80 rounded-full px-3 py-1 flex items-center gap-2 text-sm text-muted-foreground">
+                <SyncIcon size={12} className="animate-spin" />
                 Refreshing...
               </div>
             )}

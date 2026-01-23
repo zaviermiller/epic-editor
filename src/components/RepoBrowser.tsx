@@ -23,15 +23,15 @@ import { GitHubApi } from "@/lib/github";
 import { GitHubRepository, GitHubIssue, RepoInfo, GitHubLabel } from "@/types";
 import { useAuth } from "@/lib/auth";
 import {
-  Search,
-  Loader2,
-  ChevronRight,
-  ArrowLeft,
-  AlertCircle,
-  Lock,
-  BookOpen,
-  ExternalLink,
-} from "lucide-react";
+  SearchIcon,
+  SyncIcon,
+  ChevronRightIcon,
+  ArrowLeftIcon,
+  AlertIcon,
+  LockIcon,
+  RepoIcon,
+  LinkExternalIcon,
+} from "@primer/octicons-react";
 
 interface RepoBrowserProps {
   /** Whether the dialog is open */
@@ -272,7 +272,7 @@ export function RepoBrowser({
                 onClick={handleBackToRepos}
                 className="h-8 w-8 p-0"
               >
-                <ArrowLeft className="h-4 w-4" />
+                <ArrowLeftIcon size={16} />
               </Button>
             )}
             <div>
@@ -292,7 +292,10 @@ export function RepoBrowser({
 
         {/* Search input */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <SearchIcon
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+          />
           <Input
             placeholder={
               viewState === "repos"
@@ -309,7 +312,7 @@ export function RepoBrowser({
         <div className="flex-1 min-h-0">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-primary mb-3" />
+              <SyncIcon size={32} className="animate-spin text-primary mb-3" />
               <p className="text-sm text-muted-foreground">
                 {viewState === "repos"
                   ? "Loading repositories..."
@@ -318,7 +321,7 @@ export function RepoBrowser({
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <AlertCircle className="h-8 w-8 text-destructive mb-3" />
+              <AlertIcon size={32} className="text-destructive mb-3" />
               <p className="text-sm text-destructive font-medium">Error</p>
               <p className="text-sm text-muted-foreground mt-1">{error}</p>
               <Button
@@ -338,7 +341,7 @@ export function RepoBrowser({
             <ScrollArea className="h-100 pr-4">
               {filteredRepos.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <BookOpen className="h-8 w-8 text-muted-foreground mb-3" />
+                  <RepoIcon size={32} className="text-muted-foreground mb-3" />
                   <p className="text-sm text-muted-foreground">
                     {searchQuery
                       ? "No repositories match your search"
@@ -357,9 +360,15 @@ export function RepoBrowser({
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             {repo.private ? (
-                              <Lock className="h-4 w-4 text-muted-foreground shrink-0" />
+                              <LockIcon
+                                size={16}
+                                className="text-muted-foreground shrink-0"
+                              />
                             ) : (
-                              <BookOpen className="h-4 w-4 text-muted-foreground shrink-0" />
+                              <RepoIcon
+                                size={16}
+                                className="text-muted-foreground shrink-0"
+                              />
                             )}
                             <span className="font-medium truncate">
                               {repo.full_name}
@@ -372,7 +381,7 @@ export function RepoBrowser({
                           )}
                           <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
                             <span className="flex items-center gap-1">
-                              <AlertCircle className="h-3 w-3" />
+                              <AlertIcon size={12} />
                               {repo.open_issues_count} issues
                             </span>
                             <span>
@@ -381,7 +390,10 @@ export function RepoBrowser({
                             </span>
                           </div>
                         </div>
-                        <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0 group-hover:text-foreground transition-colors" />
+                        <ChevronRightIcon
+                          size={20}
+                          className="text-muted-foreground shrink-0 group-hover:text-foreground transition-colors"
+                        />
                       </div>
                     </button>
                   ))}
@@ -392,7 +404,7 @@ export function RepoBrowser({
             <ScrollArea className="h-100 pr-4">
               {filteredIssues.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <AlertCircle className="h-8 w-8 text-muted-foreground mb-3" />
+                  <AlertIcon size={32} className="text-muted-foreground mb-3" />
                   <p className="text-sm text-muted-foreground">
                     {searchQuery
                       ? "No issues match your search"
@@ -460,7 +472,10 @@ export function RepoBrowser({
                               </div>
                             )}
                           </div>
-                          <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0 group-hover:text-foreground transition-colors" />
+                          <LinkExternalIcon
+                            size={16}
+                            className="text-muted-foreground shrink-0 group-hover:text-foreground transition-colors"
+                          />
                         </div>
                       </button>
                     ))}

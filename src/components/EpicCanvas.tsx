@@ -28,6 +28,10 @@ interface EpicCanvasProps {
   onTaskHover?: (taskNumber: number | null) => void;
   /** Callback when a task is clicked */
   onTaskClick?: (task: Task) => void;
+  /** Callback when a task drag starts */
+  onTaskDragStart?: (task: Task, e: React.MouseEvent) => void;
+  /** Task ID currently being dragged */
+  draggingTaskId?: number | null;
   /** Optional layout configuration override */
   config?: BatchLayoutConfig;
 }
@@ -45,6 +49,8 @@ export function EpicCanvas({
   highlightedTask,
   onTaskHover,
   onTaskClick,
+  onTaskDragStart,
+  draggingTaskId,
   config = DEFAULT_BATCH_LAYOUT_CONFIG,
 }: EpicCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -307,6 +313,8 @@ export function EpicCanvas({
               highlightedTask={highlightedTask}
               onTaskHover={onTaskHover}
               onTaskClick={onTaskClick}
+              onTaskDragStart={onTaskDragStart}
+              draggingTaskId={draggingTaskId}
             />
           </div>
         );

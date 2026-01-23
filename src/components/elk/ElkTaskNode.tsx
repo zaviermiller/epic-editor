@@ -3,6 +3,7 @@
  *
  * Renders a task node in the SVG canvas.
  * Displays as a colored card with status-based styling.
+ * Supports drag-and-drop for moving tasks between batches.
  */
 
 "use client";
@@ -19,8 +20,20 @@ interface ElkTaskNodeProps {
   isEditModeSelected?: boolean;
   /** Whether edit mode is active */
   isEditMode?: boolean;
+  /** Whether move-issue mode is active */
+  isMoveMode?: boolean;
+  /** Whether this task is being dragged */
+  isDragging?: boolean;
+  /** Pending move info if this task has a queued move */
+  pendingMove?: { fromBatchNumber: number; isCommitted?: boolean } | null;
   onHover?: (taskNumber: number | null) => void;
   onClick?: (taskNumber: number) => void;
+  /** Called when drag starts on this task */
+  onDragStart?: (taskNumber: number) => void;
+  /** Called when drag ends */
+  onDragEnd?: () => void;
+  /** Called when user cancels a pending move */
+  onCancelMove?: (taskNumber: number) => void;
 }
 
 // Connection+ cursor as a data URI (link icon with plus)
@@ -102,15 +115,22 @@ function wrapText(text: string, maxWidth: number, fontSize: number): string[] {
   return lines;
 }
 
+// Move cursor as a data URI (move/drag icon)
+const moveCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 9l-3 3l3 3'/%3E%3Cpath d='M9 5l3-3l3 3'/%3E%3Cpath d='M15 19l3 3l-3-3'/%3E%3Cpath d='M19 9l3 3l-3 3'/%3E%3Cline x1='2' y1='12' x2='22' y2='12'/%3E%3Cline x1='12' y1='2' x2='12' y2='22'/%3E%3C/svg%3E") 12 12, move`;
+
 export function ElkTaskNode({
   task,
-  isHighlighted = false,
-  isRelated = false,
   isDimmed = false,
   isEditModeSelected = false,
   isEditMode = false,
+  isMoveMode = false,
+  isDragging = false,
+  pendingMove = null,
   onHover,
   onClick,
+  onDragStart,
+  onDragEnd,
+  onCancelMove,
 }: ElkTaskNodeProps) {
   const colors = getStatusColors(task.status);
   const cornerRadius = 6;
@@ -120,36 +140,74 @@ export function ElkTaskNode({
 
   const titleLines = wrapText(task.title, task.width - padding.x * 2, fontSize);
 
-  // In edit mode, don't trigger hover highlighting
-  const handleMouseEnter = () => !isEditMode && onHover?.(task.taskNumber);
-  const handleMouseLeave = () => !isEditMode && onHover?.(null);
+  // In edit mode or move mode, don't trigger hover highlighting
+  const handleMouseEnter = () =>
+    !isEditMode && !isMoveMode && onHover?.(task.taskNumber);
+  const handleMouseLeave = () => !isEditMode && !isMoveMode && onHover?.(null);
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     onClick?.(task.taskNumber);
   };
 
+  // Handle drag start for move mode
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (isMoveMode && onDragStart) {
+      e.preventDefault();
+      e.stopPropagation();
+      onDragStart(task.taskNumber);
+    }
+  };
+
+  const handleMouseUp = () => {
+    if (isMoveMode && onDragEnd) {
+      onDragEnd();
+    }
+  };
+
   // Calculate opacity based on state
-  const opacity = isDimmed ? 0.3 : 1;
+  let opacity = isDimmed ? 0.3 : 1;
+  if (isDragging) {
+    opacity = 0.5;
+  }
 
   // Ring styling for highlight states
   const ringOffset = 3;
-  const ringWidth = 2;
 
   // Determine if we should show a special ring
-  const showHighlightRing = isHighlighted || isRelated;
   const showEditModeRing = isEditModeSelected;
+  const showDraggingRing = isDragging;
+  const showPendingMoveRing = pendingMove !== null;
+
+  // Handle cancel move button click
+  const handleCancelMoveClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    onCancelMove?.(task.taskNumber);
+  };
+
+  // Determine cursor
+  let cursor = "pointer";
+  if (isEditMode) {
+    cursor = connectionCursor;
+  } else if (isMoveMode) {
+    cursor = moveCursor;
+  }
 
   return (
     <g
       className="elk-task-node"
       style={{
         opacity,
-        transition: "opacity 150ms ease-in-out, transform 300ms ease-out",
-        cursor: isEditMode ? connectionCursor : "pointer",
+        transition: isDragging
+          ? "none"
+          : "opacity 150ms ease-in-out, transform 300ms ease-out",
+        cursor,
       }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onClick={handleClick}
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
     >
       {/* Edit mode selection ring (pulsing animation) */}
       {showEditModeRing && (
@@ -162,6 +220,38 @@ export function ElkTaskNode({
           ry={cornerRadius + ringOffset + 1}
           fill="none"
           stroke="#22c55e"
+          strokeWidth={3}
+          className="pointer-events-none animate-pulse"
+        />
+      )}
+
+      {/* Dragging ring (blue, pulsing) */}
+      {showDraggingRing && (
+        <rect
+          x={task.x - ringOffset - 1}
+          y={task.y - ringOffset - 1}
+          width={task.width + (ringOffset + 1) * 2}
+          height={task.height + (ringOffset + 1) * 2}
+          rx={cornerRadius + ringOffset + 1}
+          ry={cornerRadius + ringOffset + 1}
+          fill="none"
+          stroke="#3b82f6"
+          strokeWidth={3}
+          className="pointer-events-none animate-pulse"
+        />
+      )}
+
+      {/* Pending move ring (orange for pending, green for committed) */}
+      {showPendingMoveRing && (
+        <rect
+          x={task.x - ringOffset - 1}
+          y={task.y - ringOffset - 1}
+          width={task.width + (ringOffset + 1) * 2}
+          height={task.height + (ringOffset + 1) * 2}
+          rx={cornerRadius + ringOffset + 1}
+          ry={cornerRadius + ringOffset + 1}
+          fill="none"
+          stroke={pendingMove?.isCommitted ? "#22c55e" : "#f97316"}
           strokeWidth={3}
           className="pointer-events-none animate-pulse"
         />
@@ -228,6 +318,55 @@ export function ElkTaskNode({
       >
         #{task.taskNumber}
       </text>
+
+      {/* Pending move badge with cancel button */}
+      {pendingMove && (
+        <g>
+          {/* Move indicator badge - orange for pending, green for committed */}
+          <rect
+            x={task.x + task.width - 70}
+            y={task.y + task.height - 22}
+            width={54}
+            height={16}
+            rx={3}
+            fill={pendingMove.isCommitted ? "#22c55e" : "#f97316"}
+            className="pointer-events-none"
+          />
+          <text
+            x={task.x + task.width - 68}
+            y={task.y + task.height - 10}
+            fill="white"
+            style={{
+              fontSize: "9px",
+              fontWeight: 600,
+              fontFamily: "var(--font-sans, system-ui, sans-serif)",
+            }}
+            className="pointer-events-none select-none"
+          >
+            ← #{pendingMove.fromBatchNumber}
+          </text>
+
+          {/* Cancel (X) button - only show for uncommitted moves */}
+          {!pendingMove.isCommitted && (
+            <g onClick={handleCancelMoveClick} style={{ cursor: "pointer" }}>
+              <circle
+                cx={task.x + task.width - 8}
+                cy={task.y + 8}
+                r={8}
+                fill="#ef4444"
+                stroke="white"
+                strokeWidth={1.5}
+              />
+              <path
+                d={`M ${task.x + task.width - 11} ${task.y + 5} L ${task.x + task.width - 5} ${task.y + 11} M ${task.x + task.width - 5} ${task.y + 5} L ${task.x + task.width - 11} ${task.y + 11}`}
+                stroke="white"
+                strokeWidth={2}
+                strokeLinecap="round"
+              />
+            </g>
+          )}
+        </g>
+      )}
     </g>
   );
 }

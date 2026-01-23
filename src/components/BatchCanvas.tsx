@@ -29,6 +29,10 @@ interface BatchCanvasProps {
   onTaskHover?: (taskNumber: number | null) => void;
   /** Callback when a task is clicked */
   onTaskClick?: (task: Task) => void;
+  /** Callback when a task drag starts */
+  onTaskDragStart?: (task: Task, e: React.MouseEvent) => void;
+  /** Task ID currently being dragged */
+  draggingTaskId?: number | null;
   /** Optional layout configuration override */
   config?: LayoutConfig;
 }
@@ -53,6 +57,8 @@ export function BatchCanvas({
   highlightedTask,
   onTaskHover,
   onTaskClick,
+  onTaskDragStart,
+  draggingTaskId,
   config = DEFAULT_LAYOUT_CONFIG,
 }: BatchCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -262,6 +268,7 @@ export function BatchCanvas({
 
         const isHighlighted = highlightedTask === task.number;
         const isRelated = relatedTasks.has(task.number);
+        const isDragging = draggingTaskId === task.number;
 
         return (
           <div
@@ -276,6 +283,7 @@ export function BatchCanvas({
             style={{
               gridColumn: taskLayout.col + 1,
               gridRow: taskLayout.row + 1,
+              opacity: isDragging ? 0.3 : 1,
             }}
           >
             <TaskCard
@@ -284,6 +292,7 @@ export function BatchCanvas({
               isRelated={isRelated}
               onHover={onTaskHover}
               onClick={onTaskClick}
+              onDragStart={onTaskDragStart}
             />
           </div>
         );

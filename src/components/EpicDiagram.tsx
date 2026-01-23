@@ -8,12 +8,61 @@
 
 "use client";
 
-import { useRef, useState, useCallback } from "react";
-import { Epic, Task } from "@/types";
+import { useRef, useState, useCallback, useEffect } from "react";
+import { Epic, Task, IssueStatus } from "@/types";
 import { EpicCanvas } from "./EpicCanvas";
 import { StatusLegend } from "./StatusLegend";
 import { Button } from "@/components/ui/button";
-import { ZoomIn, ZoomOut, Maximize, ExternalLink, Move } from "lucide-react";
+import {
+  ZoomInIcon,
+  ZoomOutIcon,
+  ScreenFullIcon,
+  LinkExternalIcon,
+  GrabberIcon,
+} from "@primer/octicons-react";
+
+// Dragging state interface
+interface DragState {
+  task: Task;
+  startX: number;
+  startY: number;
+  currentX: number;
+  currentY: number;
+  offsetX: number;
+  offsetY: number;
+}
+
+/**
+ * Get background color class based on status
+ */
+function getStatusBgColor(status: IssueStatus): string {
+  switch (status) {
+    case "done":
+      return "bg-green-500";
+    case "in-progress":
+      return "bg-yellow-400";
+    case "planned":
+      return "bg-blue-500";
+    case "not-planned":
+      return "bg-gray-400";
+  }
+}
+
+/**
+ * Get text color class based on status (for contrast)
+ */
+function getStatusTextColor(status: IssueStatus): string {
+  switch (status) {
+    case "done":
+      return "text-white";
+    case "in-progress":
+      return "text-gray-900";
+    case "planned":
+      return "text-white";
+    case "not-planned":
+      return "text-white";
+  }
+}
 
 interface EpicDiagramProps {
   epic: Epic;
@@ -29,6 +78,9 @@ export function EpicDiagram({ epic, onTaskClick }: EpicDiagramProps) {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
+  // Task drag state
+  const [taskDrag, setTaskDrag] = useState<DragState | null>(null);
 
   // Zoom controls
   const handleZoomIn = useCallback(() => {
@@ -81,6 +133,62 @@ export function EpicDiagram({ epic, onTaskClick }: EpicDiagramProps) {
     }
   }, []);
 
+  // Task drag handlers
+  const handleTaskDragStart = useCallback((task: Task, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const target = e.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+
+    setTaskDrag({
+      task,
+      startX: e.clientX,
+      startY: e.clientY,
+      currentX: e.clientX,
+      currentY: e.clientY,
+      offsetX: e.clientX - rect.left,
+      offsetY: e.clientY - rect.top,
+    });
+  }, []);
+
+  const handleTaskDragMove = useCallback(
+    (e: MouseEvent) => {
+      if (!taskDrag) return;
+
+      setTaskDrag((prev) =>
+        prev
+          ? {
+              ...prev,
+              currentX: e.clientX,
+              currentY: e.clientY,
+            }
+          : null,
+      );
+    },
+    [taskDrag],
+  );
+
+  const handleTaskDragEnd = useCallback(() => {
+    if (taskDrag) {
+      // TODO: Handle drop logic here (reordering, moving between batches, etc.)
+      setTaskDrag(null);
+    }
+  }, [taskDrag]);
+
+  // Global mouse events for task dragging
+  useEffect(() => {
+    if (taskDrag) {
+      window.addEventListener("mousemove", handleTaskDragMove);
+      window.addEventListener("mouseup", handleTaskDragEnd);
+
+      return () => {
+        window.removeEventListener("mousemove", handleTaskDragMove);
+        window.removeEventListener("mouseup", handleTaskDragEnd);
+      };
+    }
+  }, [taskDrag, handleTaskDragMove, handleTaskDragEnd]);
+
   return (
     <div className="flex flex-col h-full">
       {/* Epic Header */}
@@ -94,7 +202,7 @@ export function EpicDiagram({ epic, onTaskClick }: EpicDiagramProps) {
           rel="noopener noreferrer"
           className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1 mt-1"
         >
-          <ExternalLink className="h-3 w-3" />
+          <LinkExternalIcon size={12} />
           {epic.owner}/{epic.repo}
         </a>
       </div>
@@ -104,22 +212,22 @@ export function EpicDiagram({ epic, onTaskClick }: EpicDiagramProps) {
         {/* Zoom Controls */}
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleZoomOut}>
-            <ZoomOut className="h-4 w-4" />
+            <ZoomOutIcon size={16} />
           </Button>
           <span className="text-sm text-muted-foreground w-14 text-center">
             {Math.round(zoom * 100)}%
           </span>
           <Button variant="outline" size="sm" onClick={handleZoomIn}>
-            <ZoomIn className="h-4 w-4" />
+            <ZoomInIcon size={16} />
           </Button>
           <Button variant="outline" size="sm" onClick={handleResetView}>
-            <Maximize className="h-4 w-4" />
+            <ScreenFullIcon size={16} />
           </Button>
         </div>
 
         {/* Instructions */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Move className="h-3 w-3" />
+          <GrabberIcon size={12} />
           <span>Drag to pan • Ctrl+scroll to zoom</span>
         </div>
       </div>
@@ -158,8 +266,37 @@ export function EpicDiagram({ epic, onTaskClick }: EpicDiagramProps) {
             highlightedTask={highlightedTask}
             onTaskHover={setHighlightedTask}
             onTaskClick={onTaskClick}
+            onTaskDragStart={handleTaskDragStart}
+            draggingTaskId={taskDrag?.task.number ?? null}
           />
         </div>
+
+        {/* Dragging Task Ghost - rendered at fixed position */}
+        {taskDrag && (
+          <div
+            className="fixed pointer-events-none z-50"
+            style={{
+              left: taskDrag.currentX - taskDrag.offsetX,
+              top: taskDrag.currentY - taskDrag.offsetY,
+              opacity: 0.9,
+            }}
+          >
+            <div
+              className={`
+                ${getStatusBgColor(taskDrag.task.status)} ${getStatusTextColor(taskDrag.task.status)}
+                rounded-md px-3 py-2
+                text-xs font-medium leading-snug
+                shadow-xl ring-2 ring-white ring-offset-2 ring-offset-background
+                min-w-[120px] max-w-[200px]
+              `}
+            >
+              <div className="break-words">{taskDrag.task.title}</div>
+              <div className="text-[10px] opacity-75 mt-1">
+                #{taskDrag.task.number}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

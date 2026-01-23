@@ -9,7 +9,7 @@
 
 import { Batch, Task } from "@/types";
 import { BatchCanvas } from "./BatchCanvas";
-import { ExternalLink } from "lucide-react";
+import { LinkExternalIcon } from "@primer/octicons-react";
 
 interface BatchContainerProps {
   batch: Batch;
@@ -19,6 +19,10 @@ interface BatchContainerProps {
   onTaskHover?: (taskNumber: number | null) => void;
   /** Callback when a task is clicked */
   onTaskClick?: (task: Task) => void;
+  /** Callback when a task drag starts */
+  onTaskDragStart?: (task: Task, e: React.MouseEvent) => void;
+  /** Task ID currently being dragged */
+  draggingTaskId?: number | null;
 }
 
 export function BatchContainer({
@@ -26,6 +30,8 @@ export function BatchContainer({
   highlightedTask,
   onTaskHover,
   onTaskClick,
+  onTaskDragStart,
+  draggingTaskId,
 }: BatchContainerProps) {
   return (
     <div
@@ -46,7 +52,7 @@ export function BatchContainer({
               className="text-muted-foreground hover:text-foreground shrink-0"
               onClick={(e) => e.stopPropagation()}
             >
-              <ExternalLink className="h-3.5 w-3.5" />
+              <LinkExternalIcon size={14} />
             </a>
           </div>
         </div>
@@ -60,6 +66,8 @@ export function BatchContainer({
           highlightedTask={highlightedTask}
           onTaskHover={onTaskHover}
           onTaskClick={onTaskClick}
+          onTaskDragStart={onTaskDragStart}
+          draggingTaskId={draggingTaskId}
         />
       </div>
     </div>

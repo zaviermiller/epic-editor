@@ -23,12 +23,12 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import {
-  GitBranch,
-  Github,
-  Boxes,
-  FlaskConical,
-  FolderSearch,
-} from "lucide-react";
+  GitBranchIcon,
+  MarkGithubIcon,
+  StackIcon,
+  BeakerIcon,
+  FileDirectoryIcon,
+} from "@primer/octicons-react";
 import { RepoInfo } from "@/types";
 
 /**
@@ -38,7 +38,7 @@ function WelcomeState() {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
       <div className="flex items-center justify-center w-20 h-20 rounded-full bg-primary/10 mb-6">
-        <Boxes className="h-10 w-10 text-primary" />
+        <StackIcon size={40} className="text-primary" />
       </div>
       <h2 className="text-2xl font-bold mb-3">
         Welcome to GitHub Epic Visualizer
@@ -49,11 +49,11 @@ function WelcomeState() {
       </p>
       <div className="flex flex-col gap-2 text-sm text-muted-foreground">
         <p className="flex items-center gap-2">
-          <GitBranch className="h-4 w-4" />
+          <GitBranchIcon size={16} />
           View hierarchical issue structures
         </p>
         <p className="flex items-center gap-2">
-          <Boxes className="h-4 w-4" />
+          <StackIcon size={16} />
           See dependency relationships
         </p>
       </div>
@@ -94,7 +94,7 @@ export default function Home() {
             {/* Logo and title */}
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
-                <Github className="h-6 w-6 text-primary" />
+                <MarkGithubIcon size={24} className="text-primary" />
                 <h1 className="text-xl font-bold">Epic Visualizer</h1>
               </div>
             </div>
@@ -112,7 +112,7 @@ export default function Home() {
                 </div>
               ) : (
                 <Button variant="outline" size="sm" onClick={signIn}>
-                  <Github className="h-4 w-4 mr-2" />
+                  <MarkGithubIcon size={16} className="mr-2" />
                   Sign in with GitHub
                 </Button>
               )}
@@ -159,7 +159,7 @@ export default function Home() {
                 onClick={() => setRepoBrowserOpen(true)}
                 disabled={isNavigating || !isAuthenticated}
               >
-                <FolderSearch className="h-4 w-4 mr-2" />
+                <FileDirectoryIcon size={16} className="mr-2" />
                 Browse Repositories
               </Button>
               <Button
@@ -168,7 +168,7 @@ export default function Home() {
                 onClick={handleLoadMock}
                 disabled={isNavigating}
               >
-                <FlaskConical className="h-4 w-4 mr-2" />
+                <BeakerIcon size={16} className="mr-2" />
                 Load Mock Data
               </Button>
             </div>

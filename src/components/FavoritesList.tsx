@@ -17,7 +17,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Star, ExternalLink, Trash2, Clock } from "lucide-react";
+import {
+  StarFillIcon,
+  LinkExternalIcon,
+  TrashIcon,
+  ClockIcon,
+} from "@primer/octicons-react";
 
 /**
  * Format a relative time string
@@ -51,7 +56,7 @@ function FavoriteCard({ favorite, onRemove }: FavoriteCardProps) {
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
           <div className="shrink-0 mt-1">
-            <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+            <StarFillIcon size={16} className="text-yellow-500" />
           </div>
           <div className="flex-1 min-w-0">
             <Link
@@ -65,7 +70,7 @@ function FavoriteCard({ favorite, onRemove }: FavoriteCardProps) {
             </p>
             <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
-                <Clock className="h-3 w-3" />
+                <ClockIcon size={12} />
                 Updated {formatRelativeTime(favorite.lastRefreshedAt)}
               </span>
             </div>
@@ -78,7 +83,7 @@ function FavoriteCard({ favorite, onRemove }: FavoriteCardProps) {
               onClick={() => window.open(favorite.epic.url, "_blank")}
               title="Open in GitHub"
             >
-              <ExternalLink className="h-3.5 w-3.5" />
+              <LinkExternalIcon size={14} />
             </Button>
             <Button
               variant="ghost"
@@ -87,7 +92,7 @@ function FavoriteCard({ favorite, onRemove }: FavoriteCardProps) {
               onClick={() => onRemove(favorite.key)}
               title="Remove from favorites"
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              <TrashIcon size={14} />
             </Button>
           </div>
         </div>
@@ -139,7 +144,7 @@ export function FavoritesList() {
     <Card className="mb-6">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Star className="h-5 w-5 text-yellow-500" />
+          <StarFillIcon size={20} className="text-yellow-500" />
           Favorite Epics
         </CardTitle>
         <CardDescription>

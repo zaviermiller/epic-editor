@@ -62,7 +62,7 @@ export function ElkCanvas({
     scale: 1,
   });
 
-  // Edit mode state
+  // Edit mode state - Tasks
   const [editModeSourceTask, setEditModeSourceTask] = useState<number | null>(
     null,
   );
@@ -71,23 +71,244 @@ export function ElkCanvas({
   >([]);
   const [removedEdges, setRemovedEdges] = useState<Set<string>>(new Set());
 
+  // Edit mode state - Batches
+  const [editModeSourceBatch, setEditModeSourceBatch] = useState<number | null>(
+    null,
+  );
+  const [pendingBatchEdges, setPendingBatchEdges] = useState<
+    { from: number; to: number }[]
+  >([]);
+  const [removedBatchEdges, setRemovedBatchEdges] = useState<Set<string>>(
+    new Set(),
+  );
+
   const isEditMode = activeTool === "edit-relationships";
+
+  // Compute original task edges from the epic for comparison
+  const originalEdges = useMemo(() => {
+    const edges = new Set<string>();
+    for (const dep of epic.dependencies) {
+      // Edge ID format: "edge-{dependency}-{dependent}" where dependent depends on dependency
+      // In Dependency type, "from" is the dependent, "to" is the dependency
+      edges.add(`edge-${dep.to}-${dep.from}`);
+    }
+    return edges;
+  }, [epic.dependencies]);
+
+  // Compute original batch edges from the epic for comparison
+  const originalBatchEdges = useMemo(() => {
+    const edges = new Set<string>();
+    for (const batch of epic.batches) {
+      for (const depBatchNum of batch.dependsOn) {
+        // Batch edge ID format: "batch-edge-{dependency}-{dependent}"
+        edges.add(`batch-edge-${depBatchNum}-${batch.number}`);
+      }
+    }
+    return edges;
+  }, [epic.batches]);
+
+  // Check if there are actual changes compared to original state
+  const hasChanges = useMemo(() => {
+    // Build current task edge set from original + pending - removed
+    const currentEdges = new Set<string>();
+
+    // Start with original edges
+    for (const edge of originalEdges) {
+      if (!removedEdges.has(edge)) {
+        currentEdges.add(edge);
+      }
+    }
+
+    // Add pending edges
+    for (const pending of pendingEdges) {
+      const edgeId = `edge-${pending.from}-${pending.to}`;
+      currentEdges.add(edgeId);
+    }
+
+    // Check task edge changes
+    if (currentEdges.size !== originalEdges.size) {
+      return true;
+    }
+
+    for (const edge of originalEdges) {
+      if (!currentEdges.has(edge)) {
+        return true;
+      }
+    }
+
+    for (const edge of currentEdges) {
+      if (!originalEdges.has(edge)) {
+        return true;
+      }
+    }
+
+    // Build current batch edge set from original + pending - removed
+    const currentBatchEdges = new Set<string>();
+
+    for (const edge of originalBatchEdges) {
+      if (!removedBatchEdges.has(edge)) {
+        currentBatchEdges.add(edge);
+      }
+    }
+
+    for (const pending of pendingBatchEdges) {
+      const edgeId = `batch-edge-${pending.from}-${pending.to}`;
+      currentBatchEdges.add(edgeId);
+    }
+
+    // Check batch edge changes
+    if (currentBatchEdges.size !== originalBatchEdges.size) {
+      return true;
+    }
+
+    for (const edge of originalBatchEdges) {
+      if (!currentBatchEdges.has(edge)) {
+        return true;
+      }
+    }
+
+    for (const edge of currentBatchEdges) {
+      if (!originalBatchEdges.has(edge)) {
+        return true;
+      }
+    }
+
+    return false;
+  }, [
+    originalEdges,
+    pendingEdges,
+    removedEdges,
+    originalBatchEdges,
+    pendingBatchEdges,
+    removedBatchEdges,
+  ]);
+
+  // Handle save button click (no-op for now)
+  const handleSave = useCallback(() => {
+    // TODO: Implement save functionality
+    console.log("Save clicked - pending task edges:", pendingEdges);
+    console.log("Save clicked - removed task edges:", Array.from(removedEdges));
+    console.log("Save clicked - pending batch edges:", pendingBatchEdges);
+    console.log(
+      "Save clicked - removed batch edges:",
+      Array.from(removedBatchEdges),
+    );
+  }, [pendingEdges, removedEdges, pendingBatchEdges, removedBatchEdges]);
+
+  // Handle clear changes button click
+  const handleClearChanges = useCallback(() => {
+    setPendingEdges([]);
+    setRemovedEdges(new Set());
+    setEditModeSourceTask(null);
+    setPendingBatchEdges([]);
+    setRemovedBatchEdges(new Set());
+    setEditModeSourceBatch(null);
+  }, []);
 
   // Refs
   const containerRef = useRef<HTMLDivElement>(null);
   const isPanning = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
+  const hasInitialLayout = useRef(false);
 
-  // Calculate layout when epic changes
+  // Create a modified epic that includes pending edges and excludes removed edges
+  const modifiedEpic = useMemo(() => {
+    // Deep clone the epic to avoid mutating the original
+    const clonedEpic: Epic = JSON.parse(JSON.stringify(epic));
+
+    // Add pending edges as dependencies
+    // When user clicks A then B, they want arrow from A to B
+    // This means B depends on A, so we add A to B's dependsOn
+    for (const pending of pendingEdges) {
+      // Find the task that should have this dependency added (the target task)
+      for (const batch of clonedEpic.batches) {
+        const task = batch.tasks.find((t) => t.number === pending.to);
+        if (task && !task.dependsOn.includes(pending.from)) {
+          task.dependsOn.push(pending.from);
+        }
+      }
+      // Also add to the epic's dependencies array
+      // Note: in the Dependency type, "from" is the task that depends, "to" is what it depends on
+      // But for visual clarity, we keep pending as { from: source, to: target }
+      if (
+        !clonedEpic.dependencies.some(
+          (d) => d.from === pending.to && d.to === pending.from,
+        )
+      ) {
+        clonedEpic.dependencies.push({
+          from: pending.to,
+          to: pending.from,
+          type: "depends-on",
+        });
+      }
+    }
+
+    // Remove edges that are marked as removed
+    // Edge IDs are in format "edge-{dependency}-{dependent}"
+    // So edge-A-B means B depends on A (arrow from A to B)
+    for (const edgeId of removedEdges) {
+      const match = edgeId.match(/^edge-(\d+)-(\d+)$/);
+      if (match) {
+        const dependency = parseInt(match[1], 10); // The task being depended on
+        const dependent = parseInt(match[2], 10); // The task that depends
+
+        // Remove from task dependsOn arrays
+        // Find the dependent task and remove the dependency from its dependsOn
+        for (const batch of clonedEpic.batches) {
+          const task = batch.tasks.find((t) => t.number === dependent);
+          if (task) {
+            task.dependsOn = task.dependsOn.filter((d) => d !== dependency);
+          }
+        }
+
+        // Remove from epic dependencies
+        // In Dependency type, "from" is the dependent, "to" is the dependency
+        clonedEpic.dependencies = clonedEpic.dependencies.filter(
+          (d) => !(d.from === dependent && d.to === dependency),
+        );
+      }
+    }
+
+    // Add pending batch edges as dependencies
+    for (const pending of pendingBatchEdges) {
+      // Find the batch that should have this dependency added
+      const batch = clonedEpic.batches.find((b) => b.number === pending.to);
+      if (batch && !batch.dependsOn.includes(pending.from)) {
+        batch.dependsOn.push(pending.from);
+      }
+    }
+
+    // Remove batch edges that are marked as removed
+    for (const edgeId of removedBatchEdges) {
+      const match = edgeId.match(/^batch-edge-(\d+)-(\d+)$/);
+      if (match) {
+        const dependency = parseInt(match[1], 10); // The batch being depended on
+        const dependent = parseInt(match[2], 10); // The batch that depends
+
+        // Remove from batch dependsOn array
+        const batch = clonedEpic.batches.find((b) => b.number === dependent);
+        if (batch) {
+          batch.dependsOn = batch.dependsOn.filter((d) => d !== dependency);
+        }
+      }
+    }
+
+    return clonedEpic;
+  }, [epic, pendingEdges, removedEdges, pendingBatchEdges, removedBatchEdges]);
+
+  // Calculate layout when epic or modifications change
   useEffect(() => {
     let cancelled = false;
 
     async function runLayout() {
-      setIsLoading(true);
+      // Don't show loading spinner for edit mode recalculations after initial load
+      if (!hasInitialLayout.current) {
+        setIsLoading(true);
+      }
       setError(null);
 
       try {
-        const result = await calculateElkLayout(epic, config);
+        const result = await calculateElkLayout(modifiedEpic, config);
 
         if (!cancelled) {
           // Route edges after layout
@@ -103,6 +324,7 @@ export function ElkCanvas({
             edges: routedEdges,
           });
           setIsLoading(false);
+          hasInitialLayout.current = true;
         }
       } catch (err) {
         if (!cancelled) {
@@ -117,7 +339,7 @@ export function ElkCanvas({
     return () => {
       cancelled = true;
     };
-  }, [epic, config]);
+  }, [modifiedEpic, config]);
 
   // Get highlighted edges and related tasks
   const { highlightedEdges, relatedTasks } = useMemo(() => {
@@ -259,6 +481,9 @@ export function ElkCanvas({
   const handleTaskClick = useCallback(
     (taskNumber: number) => {
       if (isEditMode) {
+        // Clear any batch source selection when clicking a task
+        setEditModeSourceBatch(null);
+
         // Edit mode: first click selects source, second click creates relationship
         if (editModeSourceTask === null) {
           // First click - select source task
@@ -268,6 +493,21 @@ export function ElkCanvas({
           setEditModeSourceTask(null);
         } else {
           // Second click on different task - create relationship
+          // The edge ID format is "edge-{from}-{to}" where from is the dependency
+          const edgeId = `edge-${editModeSourceTask}-${taskNumber}`;
+
+          // Check if this edge was previously removed - if so, undo the removal
+          if (removedEdges.has(edgeId)) {
+            setRemovedEdges((prev) => {
+              const next = new Set(prev);
+              next.delete(edgeId);
+              return next;
+            });
+            // Clear source selection
+            setEditModeSourceTask(null);
+            return;
+          }
+
           // Check if this edge already exists or is pending
           const existingEdge = layout?.edges.find(
             (e) =>
@@ -303,41 +543,160 @@ export function ElkCanvas({
       onTaskClick,
       layout,
       pendingEdges,
+      removedEdges,
     ],
   );
 
   // Handle edge click in edit mode - remove the relationship
   const handleEdgeClick = useCallback(
-    (edge: { id: string; from: number; to: number }) => {
+    (edge: { id: string; from: number; to: number; isBatchEdge?: boolean }) => {
       if (isEditMode) {
-        // Check if it's a pending edge
-        const pendingIndex = pendingEdges.findIndex(
-          (e) => e.from === edge.from && e.to === edge.to,
-        );
+        if (edge.isBatchEdge) {
+          // Handle batch edge
+          const pendingIndex = pendingBatchEdges.findIndex(
+            (e) => e.from === edge.from && e.to === edge.to,
+          );
 
-        if (pendingIndex !== -1) {
-          // Remove from pending edges
-          setPendingEdges((prev) => prev.filter((_, i) => i !== pendingIndex));
+          if (pendingIndex !== -1) {
+            // Remove from pending batch edges
+            setPendingBatchEdges((prev) =>
+              prev.filter((_, i) => i !== pendingIndex),
+            );
+          } else {
+            // Mark existing batch edge as removed
+            setRemovedBatchEdges((prev) => new Set(prev).add(edge.id));
+          }
         } else {
-          // Mark existing edge as removed
-          setRemovedEdges((prev) => new Set(prev).add(edge.id));
+          // Handle task edge
+          const pendingIndex = pendingEdges.findIndex(
+            (e) => e.from === edge.from && e.to === edge.to,
+          );
+
+          if (pendingIndex !== -1) {
+            // Remove from pending edges
+            setPendingEdges((prev) =>
+              prev.filter((_, i) => i !== pendingIndex),
+            );
+          } else {
+            // Mark existing edge as removed
+            setRemovedEdges((prev) => new Set(prev).add(edge.id));
+          }
         }
       }
     },
-    [isEditMode, pendingEdges],
+    [isEditMode, pendingEdges, pendingBatchEdges],
+  );
+
+  // Handle batch body click - completes a batch relationship (can click anywhere in body)
+  const handleBatchBodyClick = useCallback(
+    (batchNumber: number) => {
+      if (
+        isEditMode &&
+        editModeSourceBatch !== null &&
+        editModeSourceBatch !== batchNumber
+      ) {
+        // Complete the relationship
+        const edgeId = `batch-edge-${editModeSourceBatch}-${batchNumber}`;
+
+        // Check if this edge was previously removed - if so, undo the removal
+        if (removedBatchEdges.has(edgeId)) {
+          setRemovedBatchEdges((prev) => {
+            const next = new Set(prev);
+            next.delete(edgeId);
+            return next;
+          });
+          setEditModeSourceBatch(null);
+          return;
+        }
+
+        // Check if this edge already exists or is pending
+        const existingEdge = layout?.edges.find(
+          (e) =>
+            e.from === editModeSourceBatch &&
+            e.to === batchNumber &&
+            e.isBatchEdge,
+        );
+        const pendingExists = pendingBatchEdges.some(
+          (e) => e.from === editModeSourceBatch && e.to === batchNumber,
+        );
+
+        if (!existingEdge && !pendingExists) {
+          setPendingBatchEdges((prev) => [
+            ...prev,
+            { from: editModeSourceBatch, to: batchNumber },
+          ]);
+        }
+        // Clear source selection
+        setEditModeSourceBatch(null);
+      }
+    },
+    [
+      isEditMode,
+      editModeSourceBatch,
+      layout,
+      pendingBatchEdges,
+      removedBatchEdges,
+    ],
+  );
+
+  // Handle batch header click - starts a batch relationship (only header can start)
+  const handleBatchHeaderClick = useCallback(
+    (batchNumber: number) => {
+      if (isEditMode) {
+        // Clear any task source selection when starting batch relationship
+        setEditModeSourceTask(null);
+
+        if (editModeSourceBatch === batchNumber) {
+          // Clicked same batch header - deselect
+          setEditModeSourceBatch(null);
+        } else if (editModeSourceBatch === null) {
+          // First click - select source batch
+          setEditModeSourceBatch(batchNumber);
+        } else {
+          // Already have a source batch selected, clicking header completes the relationship
+          handleBatchBodyClick(batchNumber);
+        }
+      }
+    },
+    [isEditMode, editModeSourceBatch, handleBatchBodyClick],
   );
 
   // Reset edit mode state when switching tools
   const handleToolChange = useCallback((tool: ToolType) => {
     setActiveTool(tool);
     setEditModeSourceTask(null);
+    setEditModeSourceBatch(null);
   }, []);
 
   // Get filtered edges (excluding removed ones)
   const visibleEdges = useMemo(() => {
     if (!layout) return [];
-    return layout.edges.filter((edge) => !removedEdges.has(edge.id));
-  }, [layout, removedEdges]);
+    return layout.edges.filter((edge) => {
+      if (edge.isBatchEdge) {
+        return !removedBatchEdges.has(edge.id);
+      }
+      return !removedEdges.has(edge.id);
+    });
+  }, [layout, removedEdges, removedBatchEdges]);
+
+  // Get set of pending edge IDs for styling
+  const pendingEdgeIds = useMemo(() => {
+    const ids = new Set<string>();
+    // Task edges
+    for (const pending of pendingEdges) {
+      // Edge IDs are in format "edge-{dependency}-{dependent}"
+      // When user clicks A then B, they want B to depend on A (arrow from A to B)
+      // So pending.from is the dependency (source of arrow) and pending.to is the dependent (target of arrow)
+      // The layout engine creates edges as "edge-{depNum}-{task.number}" where task depends on depNum
+      // So the edge ID should be "edge-{from}-{to}"
+      ids.add(`edge-${pending.from}-${pending.to}`);
+    }
+    // Batch edges
+    for (const pending of pendingBatchEdges) {
+      ids.add(`batch-edge-${pending.from}-${pending.to}`);
+    }
+    return ids;
+  }, [pendingEdges, pendingBatchEdges]);
 
   if (isLoading) {
     return (
@@ -395,7 +754,24 @@ export function ElkCanvas({
       </div>
 
       {/* Bottom Toolbar */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2">
+        {/* Save/Clear buttons - only shown when there are changes */}
+        {hasChanges && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleClearChanges}
+              className="px-4 py-2 text-sm font-medium bg-card border border-border text-foreground rounded-lg hover:bg-muted transition-colors shadow-sm"
+            >
+              Clear Changes
+            </button>
+            <button
+              onClick={handleSave}
+              className="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm"
+            >
+              Save Changes
+            </button>
+          </div>
+        )}
         <CanvasToolbar
           activeTool={activeTool}
           onToolChange={handleToolChange}
@@ -409,9 +785,13 @@ export function ElkCanvas({
             <span className="text-green-500">
               Click another task to create link, or same task to cancel
             </span>
+          ) : editModeSourceBatch !== null ? (
+            <span className="text-green-500">
+              Click another batch to create link, or same header to cancel
+            </span>
           ) : (
             <span className="text-muted-foreground">
-              Click a task to start, or click an arrow to remove
+              Click task/batch header to start, or click an arrow to remove
             </span>
           )}
         </div>
@@ -432,90 +812,90 @@ export function ElkCanvas({
         <defs>
           <marker
             id="arrowhead"
-            markerWidth="6"
-            markerHeight="6"
-            refX="5"
-            refY="3"
+            markerWidth="10"
+            markerHeight="10"
+            refX="9"
+            refY="5"
             orient="auto"
-            markerUnits="strokeWidth"
+            markerUnits="userSpaceOnUse"
           >
             <polyline
-              points="1 1, 5 3, 1 5"
+              points="1 1, 9 5, 1 9"
               fill="none"
-              className="stroke-muted-foreground"
-              strokeWidth="1"
+              stroke="var(--muted-foreground)"
+              strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
           </marker>
           <marker
             id="arrowhead-highlighted"
-            markerWidth="6"
-            markerHeight="6"
-            refX="5"
-            refY="3"
+            markerWidth="10"
+            markerHeight="10"
+            refX="9"
+            refY="5"
             orient="auto"
-            markerUnits="strokeWidth"
+            markerUnits="userSpaceOnUse"
           >
             <polyline
-              points="1 1, 5 3, 1 5"
+              points="1 1, 9 5, 1 9"
               fill="none"
-              className="stroke-primary"
-              strokeWidth="1"
+              stroke="var(--primary)"
+              strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
           </marker>
           <marker
             id="arrowhead-batch"
-            markerWidth="6"
-            markerHeight="6"
-            refX="5"
-            refY="3"
+            markerWidth="12"
+            markerHeight="12"
+            refX="10"
+            refY="6"
             orient="auto"
-            markerUnits="strokeWidth"
+            markerUnits="userSpaceOnUse"
           >
             <polyline
-              points="2 1, 5 3, 2 5"
+              points="2 2, 10 6, 2 10"
               fill="none"
-              className="stroke-primary"
-              strokeWidth="1"
+              stroke="var(--primary)"
+              strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
           </marker>
           <marker
             id="arrowhead-pending"
-            markerWidth="6"
-            markerHeight="6"
-            refX="5"
-            refY="3"
+            markerWidth="10"
+            markerHeight="10"
+            refX="9"
+            refY="5"
             orient="auto"
-            markerUnits="strokeWidth"
+            markerUnits="userSpaceOnUse"
           >
             <polyline
-              points="1 1, 5 3, 1 5"
+              points="1 1, 9 5, 1 9"
               fill="none"
               stroke="#22c55e"
-              strokeWidth="1"
+              strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
           </marker>
           <marker
             id="arrowhead-snip"
-            markerWidth="6"
-            markerHeight="6"
-            refX="5"
-            refY="3"
+            markerWidth="10"
+            markerHeight="10"
+            refX="9"
+            refY="5"
             orient="auto"
-            markerUnits="strokeWidth"
+            markerUnits="userSpaceOnUse"
           >
             <polyline
-              points="1 1, 5 3, 1 5"
+              points="1 1, 9 5, 1 9"
               fill="none"
               stroke="#f87171"
-              strokeWidth="1"
+              strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -530,6 +910,7 @@ export function ElkCanvas({
           isEditMode={isEditMode}
           onEdgeClick={handleEdgeClick}
           batchEdgesOnly={true}
+          pendingEdgeIds={pendingEdgeIds}
         />
 
         {/* Batch groups (rendered after batch edges, before task edges) */}
@@ -538,6 +919,10 @@ export function ElkCanvas({
             key={batch.id}
             batch={batch}
             isHighlighted={relatedTasks.size > 0}
+            isEditMode={isEditMode}
+            isEditModeSelected={editModeSourceBatch === batch.batchNumber}
+            onHeaderClick={handleBatchHeaderClick}
+            onBodyClick={handleBatchBodyClick}
           />
         ))}
 
@@ -549,68 +934,8 @@ export function ElkCanvas({
           isEditMode={isEditMode}
           onEdgeClick={handleEdgeClick}
           taskEdgesOnly={true}
+          pendingEdgeIds={pendingEdgeIds}
         />
-
-        {/* Pending edges (new relationships not yet saved) */}
-        {pendingEdges.length > 0 && (
-          <g className="pending-edges">
-            {pendingEdges.map((edge, index) => {
-              const fromTask = layout.tasks.find(
-                (t) => t.taskNumber === edge.from,
-              );
-              const toTask = layout.tasks.find((t) => t.taskNumber === edge.to);
-              if (!fromTask || !toTask) return null;
-
-              // Simple straight line for pending edges
-              const fromX = fromTask.x + fromTask.width;
-              const fromY = fromTask.y + fromTask.height / 2;
-              const toX = toTask.x;
-              const toY = toTask.y + toTask.height / 2;
-
-              return (
-                <g key={`pending-${edge.from}-${edge.to}`}>
-                  {/* Invisible hit area */}
-                  <line
-                    x1={fromX}
-                    y1={fromY}
-                    x2={toX}
-                    y2={toY}
-                    stroke="transparent"
-                    strokeWidth={12}
-                    className="cursor-pointer"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEdgeClick({
-                        id: `pending-${index}`,
-                        from: edge.from,
-                        to: edge.to,
-                      });
-                    }}
-                  />
-                  <line
-                    x1={fromX}
-                    y1={fromY}
-                    x2={toX}
-                    y2={toY}
-                    stroke="#22c55e"
-                    strokeWidth={2}
-                    strokeDasharray="6 3"
-                    className="cursor-pointer hover:stroke-destructive"
-                    markerEnd="url(#arrowhead-pending)"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEdgeClick({
-                        id: `pending-${index}`,
-                        from: edge.from,
-                        to: edge.to,
-                      });
-                    }}
-                  />
-                </g>
-              );
-            })}
-          </g>
-        )}
 
         {/* Task nodes */}
         {layout.tasks.map((task) => (

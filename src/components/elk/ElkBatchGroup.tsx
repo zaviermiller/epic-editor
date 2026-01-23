@@ -13,22 +13,14 @@ import { IssueStatus } from "@/types";
 interface ElkBatchGroupProps {
   batch: PositionedBatch;
   isHighlighted?: boolean;
-}
-
-/**
- * Get border color based on batch status
- */
-function getBorderColor(status: IssueStatus): string {
-  switch (status) {
-    case "done":
-      return "stroke-green-500/50";
-    case "in-progress":
-      return "stroke-yellow-400/50";
-    case "planned":
-      return "stroke-blue-500/50";
-    case "not-planned":
-      return "stroke-gray-400/50";
-  }
+  /** Whether edit mode is active */
+  isEditMode?: boolean;
+  /** Whether this batch is selected as source in edit mode */
+  isEditModeSelected?: boolean;
+  /** Called when batch header is clicked (starts connection) */
+  onHeaderClick?: (batchNumber: number) => void;
+  /** Called when batch body is clicked (completes connection) */
+  onBodyClick?: (batchNumber: number) => void;
 }
 
 /**
@@ -47,16 +39,41 @@ function getHeaderBgColor(status: IssueStatus): string {
   }
 }
 
-export function ElkBatchGroup({ batch, isHighlighted }: ElkBatchGroupProps) {
-  const borderClass = getBorderColor(batch.status);
+export function ElkBatchGroup({
+  batch,
+  isHighlighted,
+  isEditMode = false,
+  isEditModeSelected = false,
+  onHeaderClick,
+  onBodyClick,
+}: ElkBatchGroupProps) {
   const headerBg = getHeaderBgColor(batch.status);
 
   const headerHeight = 50;
   const cornerRadius = 12;
 
+  const handleHeaderClick = (e: React.MouseEvent) => {
+    if (isEditMode && onHeaderClick) {
+      e.stopPropagation();
+      onHeaderClick(batch.batchNumber);
+    }
+  };
+
+  const handleBodyClick = (e: React.MouseEvent) => {
+    if (isEditMode && onBodyClick) {
+      e.stopPropagation();
+      onBodyClick(batch.batchNumber);
+    }
+  };
+
   return (
-    <g className="elk-batch-group">
-      {/* Main container with dashed border */}
+    <g
+      className="elk-batch-group"
+      style={{
+        transition: "transform 300ms ease-out",
+      }}
+    >
+      {/* Main container with dashed border - clickable body area */}
       <rect
         x={batch.x}
         y={batch.y}
@@ -64,13 +81,33 @@ export function ElkBatchGroup({ batch, isHighlighted }: ElkBatchGroupProps) {
         height={batch.height}
         rx={cornerRadius}
         ry={cornerRadius}
-        className={`fill-card/80 stroke-gray-500 transition-opacity duration-150`}
+        className={`fill-card/80 transition-all duration-300 ${
+          isEditModeSelected
+            ? "stroke-green-500"
+            : isEditMode
+              ? "stroke-gray-500 hover:stroke-blue-400"
+              : "stroke-gray-500"
+        }`}
         style={{
-          strokeWidth: 1,
-          // strokeDasharray: "8 4",
+          strokeWidth: isEditModeSelected ? 2 : 1,
           opacity: isHighlighted ? 0.5 : 1,
+          cursor: isEditMode ? "pointer" : "default",
         }}
+        onClick={handleBodyClick}
       />
+
+      {/* Header clickable area - invisible but captures clicks */}
+      {isEditMode && (
+        <rect
+          x={batch.x}
+          y={batch.y}
+          width={batch.width}
+          height={headerHeight}
+          fill="transparent"
+          style={{ cursor: "pointer" }}
+          onClick={handleHeaderClick}
+        />
+      )}
 
       {/* Header background */}
       <rect
@@ -80,7 +117,7 @@ export function ElkBatchGroup({ batch, isHighlighted }: ElkBatchGroupProps) {
         height={headerHeight}
         rx={cornerRadius}
         ry={cornerRadius}
-        fill={headerBg}
+        fill={isEditModeSelected ? "#22c55e30" : headerBg}
         className="pointer-events-none"
         clipPath={`inset(0 0 ${batch.height - headerHeight}px 0 round ${cornerRadius}px)`}
       />
@@ -91,7 +128,7 @@ export function ElkBatchGroup({ batch, isHighlighted }: ElkBatchGroupProps) {
         y1={batch.y + headerHeight}
         x2={batch.x + batch.width}
         y2={batch.y + headerHeight}
-        className="stroke-gray-600"
+        className={isEditModeSelected ? "stroke-green-500" : "stroke-gray-600"}
         style={{ strokeWidth: 1 }}
       />
 

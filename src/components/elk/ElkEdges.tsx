@@ -8,7 +8,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { RoutedEdge } from "@/lib/elk";
 
 interface ElkEdgesProps {
@@ -23,6 +23,8 @@ interface ElkEdgesProps {
   batchEdgesOnly?: boolean;
   /** Only render task edges (for layering above batches) */
   taskEdgesOnly?: boolean;
+  /** Set of edge IDs that are pending (newly added in edit mode) */
+  pendingEdgeIds?: Set<string>;
 }
 
 // Scissors cursor as a data URI (modern minimalist scissors icon)
@@ -30,6 +32,8 @@ const scissorsCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 
 // Muted red color for hover state in edit mode
 const mutedRed = "#f87171"; // red-400
+// Pending edge color (green)
+const pendingGreen = "#22c55e"; // green-500
 
 export function ElkEdges({
   edges,
@@ -39,8 +43,14 @@ export function ElkEdges({
   onEdgeClick,
   batchEdgesOnly = false,
   taskEdgesOnly = false,
+  pendingEdgeIds = new Set(),
 }: ElkEdgesProps) {
   const [hoveredEdge, setHoveredEdge] = useState<string | null>(null);
+
+  // Clear hovered state when edges change (e.g., when an edge is restored)
+  useEffect(() => {
+    setHoveredEdge(null);
+  }, [edges]);
 
   // Separate edges by type and state for proper rendering order
   const batchEdges = edges.filter((e) => e.isBatchEdge);
@@ -66,24 +76,90 @@ export function ElkEdges({
     <g className="elk-edges">
       {/* Batch-to-batch edges (rendered behind batches when batchEdgesOnly=true) */}
       {shouldRenderBatchEdges &&
-        batchEdges.map((edge) => (
-          <path
-            key={edge.id}
-            d={edge.path}
-            fill="none"
-            className="stroke-primary transition-opacity duration-150"
-            style={{
-              strokeWidth: 3,
-              opacity: hasHighlightedTask ? 0.3 : 1,
-            }}
-            markerEnd="url(#arrowhead-batch)"
-          />
-        ))}
+        batchEdges.map((edge) => {
+          const isHovered = hoveredEdge === edge.id;
+          const isPending = pendingEdgeIds.has(edge.id);
+
+          // Determine stroke color
+          let strokeColor = "var(--primary)";
+          if (isPending) {
+            strokeColor = isEditMode && isHovered ? mutedRed : pendingGreen;
+          } else if (isEditMode && isHovered) {
+            strokeColor = mutedRed;
+          }
+
+          // Determine marker
+          let markerEnd = "url(#arrowhead-batch)";
+          if (isPending) {
+            markerEnd =
+              isEditMode && isHovered
+                ? "url(#arrowhead-snip)"
+                : "url(#arrowhead-pending)";
+          } else if (isEditMode && isHovered) {
+            markerEnd = "url(#arrowhead-snip)";
+          }
+
+          return (
+            <g key={edge.id}>
+              {/* Invisible wider hit area for easier clicking */}
+              {isEditMode && (
+                <path
+                  d={edge.path}
+                  fill="none"
+                  stroke="transparent"
+                  strokeWidth={16}
+                  style={{ cursor: scissorsCursor }}
+                  onClick={(e) => handleEdgeClick(edge, e)}
+                  onMouseEnter={() => setHoveredEdge(edge.id)}
+                  onMouseLeave={() => setHoveredEdge(null)}
+                />
+              )}
+              <path
+                d={edge.path}
+                fill="none"
+                className="transition-all duration-150"
+                style={{
+                  strokeWidth: 3,
+                  opacity: hasHighlightedTask ? 0.3 : 1,
+                  cursor: isEditMode ? scissorsCursor : undefined,
+                  strokeDasharray: isPending ? "8 4" : undefined,
+                }}
+                stroke={strokeColor}
+                markerEnd={markerEnd}
+                onClick={(e) => handleEdgeClick(edge, e)}
+                onMouseEnter={() => isEditMode && setHoveredEdge(edge.id)}
+                onMouseLeave={() => isEditMode && setHoveredEdge(null)}
+                pointerEvents={isEditMode ? "stroke" : "none"}
+              />
+            </g>
+          );
+        })}
 
       {/* Regular task edges (dimmed when there's a highlighted task) */}
       {shouldRenderTaskEdges &&
         regularTaskEdges.map((edge) => {
           const isHovered = hoveredEdge === edge.id;
+          const isPending = pendingEdgeIds.has(edge.id);
+
+          // Determine stroke color
+          let strokeColor = "var(--muted-foreground)";
+          if (isPending) {
+            strokeColor = isEditMode && isHovered ? mutedRed : pendingGreen;
+          } else if (isEditMode && isHovered) {
+            strokeColor = mutedRed;
+          }
+
+          // Determine marker
+          let markerEnd = "url(#arrowhead)";
+          if (isPending) {
+            markerEnd =
+              isEditMode && isHovered
+                ? "url(#arrowhead-snip)"
+                : "url(#arrowhead-pending)";
+          } else if (isEditMode && isHovered) {
+            markerEnd = "url(#arrowhead-snip)";
+          }
+
           return (
             <g key={edge.id}>
               {/* Invisible wider hit area for easier clicking */}
@@ -102,20 +178,15 @@ export function ElkEdges({
               <path
                 d={edge.path}
                 fill="none"
-                className="transition-all duration-150"
+                className="transition-all duration-300"
                 style={{
                   strokeWidth: 2,
                   opacity: hasHighlightedTask ? 0.15 : 1,
                   cursor: isEditMode ? scissorsCursor : undefined,
+                  strokeDasharray: isPending ? "6 3" : undefined,
                 }}
-                stroke={
-                  isEditMode && isHovered ? mutedRed : "var(--muted-foreground)"
-                }
-                markerEnd={
-                  isEditMode && isHovered
-                    ? "url(#arrowhead-snip)"
-                    : "url(#arrowhead)"
-                }
+                stroke={strokeColor}
+                markerEnd={markerEnd}
                 onClick={(e) => handleEdgeClick(edge, e)}
                 onMouseEnter={() => isEditMode && setHoveredEdge(edge.id)}
                 onMouseLeave={() => isEditMode && setHoveredEdge(null)}
@@ -129,6 +200,27 @@ export function ElkEdges({
       {shouldRenderTaskEdges &&
         highlightedTaskEdges.map((edge) => {
           const isHovered = hoveredEdge === edge.id;
+          const isPending = pendingEdgeIds.has(edge.id);
+
+          // Determine stroke color
+          let strokeColor = "var(--primary)";
+          if (isPending) {
+            strokeColor = isEditMode && isHovered ? mutedRed : pendingGreen;
+          } else if (isEditMode && isHovered) {
+            strokeColor = mutedRed;
+          }
+
+          // Determine marker
+          let markerEnd = "url(#arrowhead-highlighted)";
+          if (isPending) {
+            markerEnd =
+              isEditMode && isHovered
+                ? "url(#arrowhead-snip)"
+                : "url(#arrowhead-pending)";
+          } else if (isEditMode && isHovered) {
+            markerEnd = "url(#arrowhead-snip)";
+          }
+
           return (
             <g key={edge.id}>
               {/* Invisible wider hit area for easier clicking */}
@@ -147,17 +239,14 @@ export function ElkEdges({
               <path
                 d={edge.path}
                 fill="none"
-                className="transition-all duration-150"
+                className="transition-all duration-300"
                 style={{
                   strokeWidth: 2,
                   cursor: isEditMode ? scissorsCursor : undefined,
+                  strokeDasharray: isPending ? "6 3" : undefined,
                 }}
-                stroke={isEditMode && isHovered ? mutedRed : "var(--primary)"}
-                markerEnd={
-                  isEditMode && isHovered
-                    ? "url(#arrowhead-snip)"
-                    : "url(#arrowhead-highlighted)"
-                }
+                stroke={strokeColor}
+                markerEnd={markerEnd}
                 onClick={(e) => handleEdgeClick(edge, e)}
                 onMouseEnter={() => isEditMode && setHoveredEdge(edge.id)}
                 onMouseLeave={() => isEditMode && setHoveredEdge(null)}

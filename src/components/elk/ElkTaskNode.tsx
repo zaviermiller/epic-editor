@@ -144,7 +144,7 @@ export function ElkTaskNode({
       className="elk-task-node"
       style={{
         opacity,
-        transition: "opacity 150ms ease-in-out",
+        transition: "opacity 150ms ease-in-out, transform 300ms ease-out",
         cursor: isEditMode ? connectionCursor : "pointer",
       }}
       onMouseEnter={handleMouseEnter}

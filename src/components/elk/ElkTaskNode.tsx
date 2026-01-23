@@ -167,22 +167,6 @@ export function ElkTaskNode({
         />
       )}
 
-      {/* Highlight ring */}
-      {showHighlightRing && !showEditModeRing && (
-        <rect
-          x={task.x - ringOffset}
-          y={task.y - ringOffset}
-          width={task.width + ringOffset * 2}
-          height={task.height + ringOffset * 2}
-          rx={cornerRadius + ringOffset}
-          ry={cornerRadius + ringOffset}
-          fill="none"
-          stroke={isHighlighted ? "#ffffff" : "#60a5fa"}
-          strokeWidth={ringWidth}
-          className="pointer-events-none"
-        />
-      )}
-
       {/* Shadow */}
       <rect
         x={task.x + 1}

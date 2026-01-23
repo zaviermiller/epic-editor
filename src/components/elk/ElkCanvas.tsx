@@ -587,47 +587,54 @@ export function ElkCanvas({
     [isEditMode, pendingEdges, pendingBatchEdges],
   );
 
-  // Handle batch body click - completes a batch relationship (can click anywhere in body)
-  const handleBatchBodyClick = useCallback(
+  // Handle batch click - starts or completes a batch relationship
+  const handleBatchClick = useCallback(
     (batchNumber: number) => {
-      if (
-        isEditMode &&
-        editModeSourceBatch !== null &&
-        editModeSourceBatch !== batchNumber
-      ) {
-        // Complete the relationship
-        const edgeId = `batch-edge-${editModeSourceBatch}-${batchNumber}`;
+      if (isEditMode) {
+        // Clear any task source selection when clicking a batch
+        setEditModeSourceTask(null);
 
-        // Check if this edge was previously removed - if so, undo the removal
-        if (removedBatchEdges.has(edgeId)) {
-          setRemovedBatchEdges((prev) => {
-            const next = new Set(prev);
-            next.delete(edgeId);
-            return next;
-          });
+        if (editModeSourceBatch === batchNumber) {
+          // Clicked same batch - deselect
           setEditModeSourceBatch(null);
-          return;
-        }
+        } else if (editModeSourceBatch === null) {
+          // First click - select source batch
+          setEditModeSourceBatch(batchNumber);
+        } else {
+          // Second click on different batch - complete the relationship
+          const edgeId = `batch-edge-${editModeSourceBatch}-${batchNumber}`;
 
-        // Check if this edge already exists or is pending
-        const existingEdge = layout?.edges.find(
-          (e) =>
-            e.from === editModeSourceBatch &&
-            e.to === batchNumber &&
-            e.isBatchEdge,
-        );
-        const pendingExists = pendingBatchEdges.some(
-          (e) => e.from === editModeSourceBatch && e.to === batchNumber,
-        );
+          // Check if this edge was previously removed - if so, undo the removal
+          if (removedBatchEdges.has(edgeId)) {
+            setRemovedBatchEdges((prev) => {
+              const next = new Set(prev);
+              next.delete(edgeId);
+              return next;
+            });
+            setEditModeSourceBatch(null);
+            return;
+          }
 
-        if (!existingEdge && !pendingExists) {
-          setPendingBatchEdges((prev) => [
-            ...prev,
-            { from: editModeSourceBatch, to: batchNumber },
-          ]);
+          // Check if this edge already exists or is pending
+          const existingEdge = layout?.edges.find(
+            (e) =>
+              e.from === editModeSourceBatch &&
+              e.to === batchNumber &&
+              e.isBatchEdge,
+          );
+          const pendingExists = pendingBatchEdges.some(
+            (e) => e.from === editModeSourceBatch && e.to === batchNumber,
+          );
+
+          if (!existingEdge && !pendingExists) {
+            setPendingBatchEdges((prev) => [
+              ...prev,
+              { from: editModeSourceBatch, to: batchNumber },
+            ]);
+          }
+          // Clear source selection
+          setEditModeSourceBatch(null);
         }
-        // Clear source selection
-        setEditModeSourceBatch(null);
       }
     },
     [
@@ -637,28 +644,6 @@ export function ElkCanvas({
       pendingBatchEdges,
       removedBatchEdges,
     ],
-  );
-
-  // Handle batch header click - starts a batch relationship (only header can start)
-  const handleBatchHeaderClick = useCallback(
-    (batchNumber: number) => {
-      if (isEditMode) {
-        // Clear any task source selection when starting batch relationship
-        setEditModeSourceTask(null);
-
-        if (editModeSourceBatch === batchNumber) {
-          // Clicked same batch header - deselect
-          setEditModeSourceBatch(null);
-        } else if (editModeSourceBatch === null) {
-          // First click - select source batch
-          setEditModeSourceBatch(batchNumber);
-        } else {
-          // Already have a source batch selected, clicking header completes the relationship
-          handleBatchBodyClick(batchNumber);
-        }
-      }
-    },
-    [isEditMode, editModeSourceBatch, handleBatchBodyClick],
   );
 
   // Reset edit mode state when switching tools
@@ -787,11 +772,11 @@ export function ElkCanvas({
             </span>
           ) : editModeSourceBatch !== null ? (
             <span className="text-green-500">
-              Click another batch to create link, or same header to cancel
+              Click another batch to create link, or same batch to cancel
             </span>
           ) : (
             <span className="text-muted-foreground">
-              Click task/batch header to start, or click an arrow to remove
+              Click a task or batch to start, or click an arrow to remove
             </span>
           )}
         </div>
@@ -921,8 +906,7 @@ export function ElkCanvas({
             isHighlighted={relatedTasks.size > 0}
             isEditMode={isEditMode}
             isEditModeSelected={editModeSourceBatch === batch.batchNumber}
-            onHeaderClick={handleBatchHeaderClick}
-            onBodyClick={handleBatchBodyClick}
+            onClick={handleBatchClick}
           />
         ))}
 

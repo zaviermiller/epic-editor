@@ -66,6 +66,36 @@ interface TransformState {
   scale: number;
 }
 
+/**
+ * Get Tailwind background color class based on status
+ */
+function getStatusBgClass(status: string): string {
+  switch (status) {
+    case "done":
+      return "bg-green-500";
+    case "in-progress":
+      return "bg-yellow-400";
+    case "planned":
+      return "bg-blue-500";
+    case "not-planned":
+      return "bg-gray-400";
+    default:
+      return "bg-gray-400";
+  }
+}
+
+/**
+ * Get Tailwind text color class based on status
+ */
+function getStatusTextClass(status: string): string {
+  switch (status) {
+    case "in-progress":
+      return "text-gray-900";
+    default:
+      return "text-white";
+  }
+}
+
 export function ElkCanvas({
   epic,
   config = DEFAULT_ELK_CONFIG,
@@ -117,6 +147,10 @@ export function ElkCanvas({
     sourceBatchNumber: number;
   } | null>(null);
   const [dropTargetBatch, setDropTargetBatch] = useState<number | null>(null);
+  const [dragPosition, setDragPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const [pendingMoves, setPendingMoves] = useState<
     {
       taskNumber: number;
@@ -1054,7 +1088,7 @@ export function ElkCanvas({
 
   // Handle drag start on a task
   const handleTaskDragStart = useCallback(
-    (taskNumber: number) => {
+    (taskNumber: number, e: React.MouseEvent) => {
       if (!isMoveMode) return;
       const sourceBatchNumber = findTaskBatch(taskNumber);
       if (sourceBatchNumber === null) return;
@@ -1064,6 +1098,7 @@ export function ElkCanvas({
       if (taskId === null) return;
 
       setDraggingTask({ taskNumber, taskId, sourceBatchNumber });
+      setDragPosition({ x: e.clientX, y: e.clientY });
     },
     [isMoveMode, findTaskBatch, findIssueIdByNumber],
   );
@@ -1072,6 +1107,7 @@ export function ElkCanvas({
   const handleTaskDragEnd = useCallback(() => {
     setDraggingTask(null);
     setDropTargetBatch(null);
+    setDragPosition(null);
   }, []);
 
   // Handle drop on a batch - queue the move for later save
@@ -1154,6 +1190,9 @@ export function ElkCanvas({
 
       // Update drop target based on mouse position when dragging
       if (!isMoveMode || !draggingTask || !layout) return;
+
+      // Update drag position for ghost element
+      setDragPosition({ x: e.clientX, y: e.clientY });
 
       const container = containerRef.current;
       if (!container) return;
@@ -1365,6 +1404,39 @@ export function ElkCanvas({
         </div>
       )}
 
+      {/* Dragging Ghost Element - follows cursor when dragging a task */}
+      {draggingTask &&
+        dragPosition &&
+        (() => {
+          const draggedTask = findTask(draggingTask.taskNumber);
+          if (!draggedTask) return null;
+          return (
+            <div
+              className="fixed pointer-events-none z-50"
+              style={{
+                left: dragPosition.x - 60,
+                top: dragPosition.y - 20,
+                opacity: 0.9,
+              }}
+            >
+              <div
+                className={`
+                ${getStatusBgClass(draggedTask.status)} ${getStatusTextClass(draggedTask.status)}
+                rounded-md px-3 py-2
+                text-xs font-medium leading-snug
+                shadow-xl ring-2 ring-white ring-offset-2 ring-offset-background
+                min-w-[120px] max-w-[200px]
+              `}
+              >
+                <div className="break-words">{draggedTask.title}</div>
+                <div className="text-[10px] opacity-75 mt-1">
+                  #{draggedTask.number}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
       {/* SVG Canvas */}
       <svg
         width={layout.canvasWidth}
@@ -1483,7 +1555,7 @@ export function ElkCanvas({
         <ElkEdges
           edges={visibleEdges}
           highlightedEdges={highlightedEdges}
-          hasHighlightedTask={highlightedTask !== null}
+          hasHighlightedTask={highlightedTask !== null && relatedTasks.size > 1}
           isEditMode={isEditMode}
           onEdgeClick={handleEdgeClick}
           batchEdgesOnly={true}
@@ -1495,10 +1567,11 @@ export function ElkCanvas({
           <ElkBatchGroup
             key={batch.id}
             batch={batch}
-            isHighlighted={relatedTasks.size > 0}
+            isHighlighted={relatedTasks.size > 1}
             isEditMode={isEditMode}
             isEditModeSelected={editModeSourceBatch === batch.batchNumber}
             isMoveMode={isMoveMode}
+            isDragActive={draggingTask !== null}
             isDropTarget={dropTargetBatch === batch.batchNumber}
             onClick={handleBatchClick}
             onDrop={handleBatchDrop}
@@ -1509,7 +1582,7 @@ export function ElkCanvas({
         <ElkEdges
           edges={visibleEdges}
           highlightedEdges={highlightedEdges}
-          hasHighlightedTask={highlightedTask !== null}
+          hasHighlightedTask={highlightedTask !== null && relatedTasks.size > 1}
           isEditMode={isEditMode}
           onEdgeClick={handleEdgeClick}
           taskEdgesOnly={true}
@@ -1540,6 +1613,7 @@ export function ElkCanvas({
                 !isEditMode &&
                 !isMoveMode &&
                 highlightedTask !== null &&
+                relatedTasks.size > 1 &&
                 !relatedTasks.has(task.taskNumber)
               }
               isEditModeSelected={editModeSourceTask === task.taskNumber}

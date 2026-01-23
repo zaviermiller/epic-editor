@@ -29,15 +29,15 @@ interface ElkTaskNodeProps {
   onHover?: (taskNumber: number | null) => void;
   onClick?: (taskNumber: number) => void;
   /** Called when drag starts on this task */
-  onDragStart?: (taskNumber: number) => void;
+  onDragStart?: (taskNumber: number, e: React.MouseEvent) => void;
   /** Called when drag ends */
   onDragEnd?: () => void;
   /** Called when user cancels a pending move */
   onCancelMove?: (taskNumber: number) => void;
 }
 
-// Connection+ cursor as a data URI (link icon with plus)
-const connectionCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2322c55e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/%3E%3Cpath d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/%3E%3Ccircle cx='19' cy='5' r='4' fill='%2322c55e' stroke='none'/%3E%3Cpath d='M19 3v4M17 5h4' stroke='white' stroke-width='1.5'/%3E%3C/svg%3E") 12 12, pointer`;
+// Connection+ cursor as a data URI (link icon with plus) - white color
+const connectionCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/%3E%3Cpath d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/%3E%3Ccircle cx='19' cy='5' r='4' fill='%23ffffff' stroke='none'/%3E%3Cpath d='M19 3v4M17 5h4' stroke='%23000000' stroke-width='1.5'/%3E%3C/svg%3E") 12 12, pointer`;
 
 /**
  * Get background color based on status
@@ -115,8 +115,8 @@ function wrapText(text: string, maxWidth: number, fontSize: number): string[] {
   return lines;
 }
 
-// Move cursor as a data URI (move/drag icon)
-const moveCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 9l-3 3l3 3'/%3E%3Cpath d='M9 5l3-3l3 3'/%3E%3Cpath d='M15 19l3 3l-3-3'/%3E%3Cpath d='M19 9l3 3l-3 3'/%3E%3Cline x1='2' y1='12' x2='22' y2='12'/%3E%3Cline x1='12' y1='2' x2='12' y2='22'/%3E%3C/svg%3E") 12 12, move`;
+// Move cursor as a data URI (move/drag icon) - white color
+const moveCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 9l-3 3l3 3'/%3E%3Cpath d='M9 5l3-3l3 3'/%3E%3Cpath d='M15 19l3 3l-3-3'/%3E%3Cpath d='M19 9l3 3l-3 3'/%3E%3Cline x1='2' y1='12' x2='22' y2='12'/%3E%3Cline x1='12' y1='2' x2='12' y2='22'/%3E%3C/svg%3E") 12 12, move`;
 
 export function ElkTaskNode({
   task,
@@ -146,7 +146,10 @@ export function ElkTaskNode({
   const handleMouseLeave = () => !isEditMode && !isMoveMode && onHover?.(null);
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onClick?.(task.taskNumber);
+    // Don't trigger click when in move mode
+    if (!isMoveMode) {
+      onClick?.(task.taskNumber);
+    }
   };
 
   // Handle drag start for move mode
@@ -154,7 +157,7 @@ export function ElkTaskNode({
     if (isMoveMode && onDragStart) {
       e.preventDefault();
       e.stopPropagation();
-      onDragStart(task.taskNumber);
+      onDragStart(task.taskNumber, e);
     }
   };
 

@@ -21,6 +21,8 @@ interface ElkBatchGroupProps {
   isEditModeSelected?: boolean;
   /** Whether move-issue mode is active */
   isMoveMode?: boolean;
+  /** Whether a drag operation is currently in progress */
+  isDragActive?: boolean;
   /** Whether this batch is a valid drop target (has a task being dragged over it) */
   isDropTarget?: boolean;
   /** Called when batch is clicked in edit mode */
@@ -30,10 +32,10 @@ interface ElkBatchGroupProps {
 }
 
 // Connection+ cursor as a data URI (link icon with plus)
-const connectionCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2322c55e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/%3E%3Cpath d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/%3E%3Ccircle cx='19' cy='5' r='4' fill='%2322c55e' stroke='none'/%3E%3Cpath d='M19 3v4M17 5h4' stroke='white' stroke-width='1.5'/%3E%3C/svg%3E") 12 12, pointer`;
+const connectionCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/%3E%3Cpath d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/%3E%3Ccircle cx='19' cy='5' r='4' fill='%2322c55e' stroke='none'/%3E%3Cpath d='M19 3v4M17 5h4' stroke='white' stroke-width='1.5'/%3E%3C/svg%3E") 12 12, pointer`;
 
 // Drop target cursor
-const dropTargetCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 5v14'/%3E%3Cpath d='M5 12h14'/%3E%3C/svg%3E") 12 12, copy`;
+const dropTargetCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 5v14'/%3E%3Cpath d='M5 12h14'/%3E%3C/svg%3E") 12 12, copy`;
 
 /**
  * Get header background color based on status
@@ -57,6 +59,7 @@ export function ElkBatchGroup({
   isEditMode = false,
   isEditModeSelected = false,
   isMoveMode = false,
+  isDragActive = false,
   isDropTarget = false,
   onClick,
   onDrop,
@@ -71,7 +74,8 @@ export function ElkBatchGroup({
   // Synthetic batches (number <= 0) can't have dependencies edited or receive drops
   const isSyntheticBatch = batch.batchNumber <= 0;
   const canEditDependencies = isEditMode && !isSyntheticBatch;
-  const canReceiveDrop = isMoveMode && !isSyntheticBatch;
+  // Only show as droppable when actually dragging a task
+  const canReceiveDrop = isMoveMode && isDragActive && !isSyntheticBatch;
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();

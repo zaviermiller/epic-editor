@@ -19,6 +19,18 @@ import { Epic } from "@/types";
 import { GitHubApi } from "@/lib/github";
 
 /**
+ * Canvas display settings
+ */
+export interface CanvasSettings {
+  /** Whether to show edges between tasks in different batches */
+  showInterBatchEdges: boolean;
+}
+
+const DEFAULT_SETTINGS: CanvasSettings = {
+  showInterBatchEdges: true,
+};
+
+/**
  * Available tool types
  */
 export type ToolType = "select" | "edit-relationships" | "move-issue";
@@ -62,6 +74,15 @@ interface EpicContextValue {
   isExporting: boolean;
   /** Set export state */
   setIsExporting: (exporting: boolean) => void;
+
+  // Settings state
+  /** Canvas display settings */
+  settings: CanvasSettings;
+  /** Update a specific setting */
+  updateSetting: <K extends keyof CanvasSettings>(
+    key: K,
+    value: CanvasSettings[K],
+  ) => void;
 }
 
 const EpicContext = createContext<EpicContextValue | null>(null);
@@ -90,6 +111,16 @@ export function EpicProvider({
 
   // Export state
   const [isExporting, setIsExporting] = useState(false);
+
+  // Settings state
+  const [settings, setSettings] = useState<CanvasSettings>(DEFAULT_SETTINGS);
+
+  const updateSetting = useCallback(
+    <K extends keyof CanvasSettings>(key: K, value: CanvasSettings[K]) => {
+      setSettings((prev) => ({ ...prev, [key]: value }));
+    },
+    [],
+  );
 
   // Derived tool modes
   const isEditMode = activeTool === "edit-relationships";
@@ -128,6 +159,10 @@ export function EpicProvider({
       // Export state
       isExporting,
       setIsExporting,
+
+      // Settings state
+      settings,
+      updateSetting,
     }),
     [
       epic.owner,
@@ -140,6 +175,8 @@ export function EpicProvider({
       isMoveMode,
       registerToolChangeCallback,
       isExporting,
+      settings,
+      updateSetting,
     ],
   );
 
@@ -199,4 +236,12 @@ export function useIsToolActive(tool: ToolType): boolean {
 export function useGitHubApi(): GitHubApi | undefined {
   const { api } = useEpicContext();
   return api;
+}
+
+/**
+ * Hook to access canvas settings
+ */
+export function useCanvasSettings() {
+  const { settings, updateSetting } = useEpicContext();
+  return { settings, updateSetting };
 }

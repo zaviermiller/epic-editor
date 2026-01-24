@@ -3,6 +3,9 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 
+import "@primer/primitives/dist/css/functional/themes/light.css";
+import { BaseStyles, ThemeProvider } from "@primer/react";
+
 /**
  * Primary font configuration using Inter for clean, technical readability
  * as specified in the PRD typography hierarchy
@@ -30,7 +33,11 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`${inter.variable} font-sans antialiased`}>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <ThemeProvider>
+            <BaseStyles>{children}</BaseStyles>
+          </ThemeProvider>
+        </AuthProvider>
       </body>
     </html>
   );

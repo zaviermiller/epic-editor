@@ -62,8 +62,13 @@ function ElkCanvasInner({
   const exportRef = useRef<HTMLDivElement>(null);
 
   // State from context
-  const { isEditMode, isMoveMode, registerToolChangeCallback, setIsExporting } =
-    useEpicContext();
+  const {
+    isEditMode,
+    isMoveMode,
+    registerToolChangeCallback,
+    setIsExporting,
+    settings,
+  } = useEpicContext();
 
   // Canvas transform (pan/zoom)
   const {
@@ -163,16 +168,28 @@ function ElkCanvasInner({
     config,
   });
 
-  // Get visible edges (computed from layout and removed edges)
+  // Get visible edges (computed from layout, removed edges, and settings)
   const visibleEdges = useMemo(() => {
     if (!layout) return [];
     return layout.edges.filter((edge) => {
+      // Filter out removed edges
       if (edge.isBatchEdge) {
         return !removedBatchEdges.has(edge.id);
       }
-      return !removedEdges.has(edge.id);
+      if (removedEdges.has(edge.id)) {
+        return false;
+      }
+      // Filter out inter-batch task edges if setting is disabled
+      if (
+        !settings.showInterBatchEdges &&
+        edge.isInterBatch &&
+        !edge.isBatchEdge
+      ) {
+        return false;
+      }
+      return true;
     });
-  }, [layout, removedEdges, removedBatchEdges]);
+  }, [layout, removedEdges, removedBatchEdges, settings.showInterBatchEdges]);
 
   // Highlighting
   const {

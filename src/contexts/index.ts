@@ -5,5 +5,6 @@ export {
   useRepoInfo,
   useIsToolActive,
   useGitHubApi,
+  useCanvasSettings,
 } from "./EpicContext";
-export type { ToolType, RepoInfo } from "./EpicContext";
+export type { ToolType, RepoInfo, CanvasSettings } from "./EpicContext";

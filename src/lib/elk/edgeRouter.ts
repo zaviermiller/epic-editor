@@ -123,25 +123,49 @@ function choosePorts(
   }
 
   // For intra-batch connections, prefer vertical connections for down-flowing layouts
-  // Determine primary direction
-  if (Math.abs(dy) > Math.abs(dx)) {
-    // Primarily vertical
+  // Within a batch, tasks are typically stacked vertically, so we should prefer
+  // vertical exit ports (bottom/top) and only use horizontal entry when needed
+
+  // If there's meaningful vertical offset, prefer vertical exit with mixed entry if needed
+  if (Math.abs(dy) > 20) {
     if (dy > 0) {
-      // Target is below
-      return { from: fromPorts.bottom, to: toPorts.top };
+      // Target is below - exit from bottom
+      // Choose entry port based on horizontal offset
+      if (Math.abs(dx) > Math.abs(dy) * 0.5) {
+        // Significant horizontal offset - use mixed connection (bottom → left/right)
+        if (dx > 0) {
+          return { from: fromPorts.bottom, to: toPorts.left };
+        } else {
+          return { from: fromPorts.bottom, to: toPorts.right };
+        }
+      } else {
+        // Primarily vertical - use straight vertical connection
+        return { from: fromPorts.bottom, to: toPorts.top };
+      }
     } else {
-      // Target is above
-      return { from: fromPorts.top, to: toPorts.bottom };
+      // Target is above - exit from top
+      // Choose entry port based on horizontal offset
+      if (Math.abs(dx) > Math.abs(dy) * 0.5) {
+        // Significant horizontal offset - use mixed connection (top → left/right)
+        if (dx > 0) {
+          return { from: fromPorts.top, to: toPorts.left };
+        } else {
+          return { from: fromPorts.top, to: toPorts.right };
+        }
+      } else {
+        // Primarily vertical - use straight vertical connection
+        return { from: fromPorts.top, to: toPorts.bottom };
+      }
     }
+  }
+
+  // Minimal vertical offset - use horizontal connections
+  if (dx > 0) {
+    // Target is to the right
+    return { from: fromPorts.right, to: toPorts.left };
   } else {
-    // Primarily horizontal
-    if (dx > 0) {
-      // Target is to the right
-      return { from: fromPorts.right, to: toPorts.left };
-    } else {
-      // Target is to the left
-      return { from: fromPorts.left, to: toPorts.right };
-    }
+    // Target is to the left
+    return { from: fromPorts.left, to: toPorts.right };
   }
 }
 

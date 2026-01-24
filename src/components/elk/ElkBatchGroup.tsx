@@ -14,7 +14,10 @@ import { IssueStatus } from "@/types";
 
 interface ElkBatchGroupProps {
   batch: PositionedBatch;
-  isHighlighted?: boolean;
+  /** Whether this batch should be dimmed (not related to hovered batch) */
+  isDimmed?: boolean;
+  /** Whether this batch is connected to the hovered batch */
+  isRelatedBatch?: boolean;
   /** Whether edit mode is active */
   isEditMode?: boolean;
   /** Whether this batch is selected as source in edit mode */
@@ -29,6 +32,8 @@ interface ElkBatchGroupProps {
   onClick?: (batchNumber: number) => void;
   /** Called when a task is dropped on this batch */
   onDrop?: (batchNumber: number) => void;
+  /** Called when mouse enters batch (for view mode hover highlighting) */
+  onHover?: (batchNumber: number | null) => void;
   /** When true, uses explicit hex colors for export compatibility */
   forExport?: boolean;
   /** Repository owner for constructing GitHub URLs */
@@ -61,7 +66,8 @@ function getHeaderBgColor(status: IssueStatus): string {
 
 export function ElkBatchGroup({
   batch,
-  isHighlighted,
+  isDimmed = false,
+  isRelatedBatch = false,
   isEditMode = false,
   isEditModeSelected = false,
   isMoveMode = false,
@@ -69,6 +75,7 @@ export function ElkBatchGroup({
   isDropTarget = false,
   onClick,
   onDrop,
+  onHover,
   forExport = false,
   owner,
   repo,
@@ -86,6 +93,8 @@ export function ElkBatchGroup({
   const canEditDependencies = isEditMode && !isSyntheticBatch;
   // Only show as droppable when actually dragging a task
   const canReceiveDrop = isMoveMode && isDragActive && !isSyntheticBatch;
+  // View mode hover is only enabled when not in edit or move mode
+  const canHoverHighlight = !isEditMode && !isMoveMode && !isSyntheticBatch;
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -98,10 +107,18 @@ export function ElkBatchGroup({
     if (canEditDependencies || canReceiveDrop) {
       setIsHovered(true);
     }
+    // Trigger batch hover highlighting in view mode
+    if (canHoverHighlight && onHover) {
+      onHover(batch.batchNumber);
+    }
   };
 
   const handleMouseLeave = () => {
     setIsHovered(false);
+    // Clear batch hover highlighting in view mode
+    if (canHoverHighlight && onHover) {
+      onHover(null);
+    }
   };
 
   // Handle mouse up for drop target (completing a drag-and-drop)
@@ -141,13 +158,31 @@ export function ElkBatchGroup({
     <g
       className="elk-batch-group"
       style={{
-        transition: "transform 300ms ease-out",
+        transition: "transform 300ms ease-out, opacity 150ms ease-in-out",
         cursor,
+        opacity: isDimmed ? 0.3 : 1,
       }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onMouseUp={handleMouseUp}
     >
+      {/* Related batch highlight ring (subtle glow when connected to hovered batch) */}
+      {isRelatedBatch && !isSyntheticBatch && (
+        <rect
+          x={batch.x - ringOffset - 1}
+          y={batch.y - ringOffset - 1}
+          width={batch.width + (ringOffset + 1) * 2}
+          height={batch.height + (ringOffset + 1) * 2}
+          rx={cornerRadius + ringOffset + 1}
+          ry={cornerRadius + ringOffset + 1}
+          fill="none"
+          stroke="#3b82f6"
+          strokeWidth={2}
+          strokeOpacity={0.5}
+          className="pointer-events-none"
+        />
+      )}
+
       {/* Edit mode selection ring (pulsing animation) */}
       {isEditModeSelected && !isSyntheticBatch && (
         <rect
@@ -192,7 +227,6 @@ export function ElkBatchGroup({
         style={{
           stroke: borderColor,
           strokeWidth: borderWidth,
-          opacity: isHighlighted ? 0.5 : 1,
         }}
         onClick={handleClick}
       />

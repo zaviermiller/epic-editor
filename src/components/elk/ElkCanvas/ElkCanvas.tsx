@@ -179,6 +179,10 @@ function ElkCanvasInner({
     setHighlightedTask,
     highlightedEdges,
     relatedTasks,
+    highlightedBatch,
+    setHighlightedBatch,
+    highlightedBatchEdges,
+    relatedBatches,
   } = useHighlighting({ layout });
 
   // Save changes
@@ -644,6 +648,10 @@ function ElkCanvasInner({
           onEdgeClick={handleEdgeClick}
           batchEdgesOnly={true}
           pendingEdgeIds={pendingEdgeIds}
+          highlightedBatchEdges={highlightedBatchEdges}
+          hasHighlightedBatch={
+            highlightedBatch !== null && relatedBatches.size > 1
+          }
         />
 
         {/* Batch groups */}
@@ -651,7 +659,20 @@ function ElkCanvasInner({
           <ElkBatchGroup
             key={batch.id}
             batch={batch}
-            isHighlighted={relatedTasks.size > 1}
+            isDimmed={
+              !isEditMode &&
+              !isMoveMode &&
+              highlightedBatch !== null &&
+              relatedBatches.size > 1 &&
+              !relatedBatches.has(batch.batchNumber)
+            }
+            isRelatedBatch={
+              !isEditMode &&
+              !isMoveMode &&
+              highlightedBatch !== null &&
+              relatedBatches.has(batch.batchNumber) &&
+              highlightedBatch !== batch.batchNumber
+            }
             isEditMode={isEditMode}
             isEditModeSelected={editModeSourceBatch === batch.batchNumber}
             isMoveMode={isMoveMode}
@@ -659,6 +680,7 @@ function ElkCanvasInner({
             isDropTarget={dropTargetBatch === batch.batchNumber}
             onClick={handleBatchClick}
             onDrop={handleBatchDrop}
+            onHover={setHighlightedBatch}
             owner={epic.owner}
             repo={epic.repo}
           />
@@ -673,6 +695,10 @@ function ElkCanvasInner({
           onEdgeClick={handleEdgeClick}
           taskEdgesOnly={true}
           pendingEdgeIds={pendingEdgeIds}
+          highlightedBatchEdges={highlightedBatchEdges}
+          hasHighlightedBatch={
+            highlightedBatch !== null && relatedBatches.size > 1
+          }
         />
 
         {/* Task nodes */}
@@ -698,9 +724,12 @@ function ElkCanvasInner({
               isDimmed={
                 !isEditMode &&
                 !isMoveMode &&
-                highlightedTask !== null &&
-                relatedTasks.size > 1 &&
-                !relatedTasks.has(task.taskNumber)
+                ((highlightedTask !== null &&
+                  relatedTasks.size > 1 &&
+                  !relatedTasks.has(task.taskNumber)) ||
+                  (highlightedBatch !== null &&
+                    relatedBatches.size > 1 &&
+                    !relatedBatches.has(task.batchNumber)))
               }
               isEditModeSelected={editModeSourceTask === task.taskNumber}
               isEditMode={isEditMode}

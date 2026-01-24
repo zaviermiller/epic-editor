@@ -27,6 +27,10 @@ interface ElkEdgesProps {
   pendingEdgeIds?: Set<string>;
   /** When true, uses explicit hex colors instead of CSS variables for export compatibility */
   forExport?: boolean;
+  /** Set of edge IDs that should be highlighted due to batch hover */
+  highlightedBatchEdges?: Set<string>;
+  /** Whether a batch is currently being hovered */
+  hasHighlightedBatch?: boolean;
 }
 
 // Scissors cursor as a data URI (modern minimalist scissors icon)
@@ -47,6 +51,8 @@ export function ElkEdges({
   taskEdgesOnly = false,
   pendingEdgeIds = new Set(),
   forExport = false,
+  highlightedBatchEdges = new Set(),
+  hasHighlightedBatch = false,
 }: ElkEdgesProps) {
   const [hoveredEdge, setHoveredEdge] = useState<string | null>(null);
 
@@ -82,6 +88,7 @@ export function ElkEdges({
         batchEdges.map((edge) => {
           const isHovered = hoveredEdge === edge.id;
           const isPending = pendingEdgeIds.has(edge.id);
+          const isBatchHighlighted = highlightedBatchEdges.has(edge.id);
 
           // Determine stroke color (use hex for export compatibility)
           let strokeColor = forExport ? "#3b82f6" : "var(--primary)";
@@ -89,6 +96,8 @@ export function ElkEdges({
             strokeColor = isEditMode && isHovered ? mutedRed : pendingGreen;
           } else if (isEditMode && isHovered) {
             strokeColor = mutedRed;
+          } else if (isBatchHighlighted && !isEditMode) {
+            strokeColor = "#3b82f6"; // blue-500 for highlighted batch connections
           }
 
           // Determine marker (use export-specific markers when forExport)
@@ -102,6 +111,16 @@ export function ElkEdges({
                 : "url(#arrowhead-pending)";
           } else if (isEditMode && isHovered) {
             markerEnd = "url(#arrowhead-snip)";
+          } else if (isBatchHighlighted && !isEditMode) {
+            markerEnd = "url(#arrowhead-highlighted)";
+          }
+
+          // Calculate opacity: dim when there's highlighting and this edge is not part of it
+          let opacity = 1;
+          if (hasHighlightedTask) {
+            opacity = 0.3;
+          } else if (hasHighlightedBatch && !isBatchHighlighted) {
+            opacity = 0.15;
           }
 
           return (
@@ -124,8 +143,8 @@ export function ElkEdges({
                 fill="none"
                 className="transition-all duration-150"
                 style={{
-                  strokeWidth: 3,
-                  opacity: hasHighlightedTask ? 0.3 : 1,
+                  strokeWidth: isBatchHighlighted && !isEditMode ? 4 : 3,
+                  opacity,
                   cursor: isEditMode ? scissorsCursor : undefined,
                   strokeDasharray: isPending ? "8 4" : undefined,
                 }}
@@ -140,11 +159,12 @@ export function ElkEdges({
           );
         })}
 
-      {/* Regular task edges (dimmed when there's a highlighted task) */}
+      {/* Regular task edges (dimmed when there's a highlighted task or batch) */}
       {shouldRenderTaskEdges &&
         regularTaskEdges.map((edge) => {
           const isHovered = hoveredEdge === edge.id;
           const isPending = pendingEdgeIds.has(edge.id);
+          const isBatchHighlighted = highlightedBatchEdges.has(edge.id);
 
           // Determine stroke color (use hex for export compatibility)
           let strokeColor = forExport ? "#a1a1aa" : "var(--muted-foreground)";
@@ -152,6 +172,8 @@ export function ElkEdges({
             strokeColor = isEditMode && isHovered ? mutedRed : pendingGreen;
           } else if (isEditMode && isHovered) {
             strokeColor = mutedRed;
+          } else if (isBatchHighlighted && !isEditMode) {
+            strokeColor = "#3b82f6"; // blue-500 for highlighted inter-batch connections
           }
 
           // Determine marker (use export-specific markers when forExport)
@@ -165,6 +187,16 @@ export function ElkEdges({
                 : "url(#arrowhead-pending)";
           } else if (isEditMode && isHovered) {
             markerEnd = "url(#arrowhead-snip)";
+          } else if (isBatchHighlighted && !isEditMode) {
+            markerEnd = "url(#arrowhead-highlighted)";
+          }
+
+          // Calculate opacity: dim when there's highlighting and this edge is not part of it
+          let opacity = 1;
+          if (hasHighlightedTask) {
+            opacity = 0.15;
+          } else if (hasHighlightedBatch && !isBatchHighlighted) {
+            opacity = 0.15;
           }
 
           return (
@@ -187,8 +219,8 @@ export function ElkEdges({
                 fill="none"
                 className="transition-all duration-300"
                 style={{
-                  strokeWidth: 2,
-                  opacity: hasHighlightedTask ? 0.15 : 1,
+                  strokeWidth: isBatchHighlighted && !isEditMode ? 2.5 : 2,
+                  opacity,
                   cursor: isEditMode ? scissorsCursor : undefined,
                   strokeDasharray: isPending ? "6 3" : undefined,
                 }}

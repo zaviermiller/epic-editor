@@ -68,7 +68,8 @@ export function ExportContainer({
           <ElkBatchGroup
             key={`export-${batch.id}`}
             batch={batch}
-            isHighlighted={false}
+            isDimmed={false}
+            isRelatedBatch={false}
             isEditMode={false}
             isEditModeSelected={false}
             isMoveMode={false}

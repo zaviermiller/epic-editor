@@ -25,6 +25,8 @@ interface ElkEdgesProps {
   taskEdgesOnly?: boolean;
   /** Set of edge IDs that are pending (newly added in edit mode) */
   pendingEdgeIds?: Set<string>;
+  /** When true, uses explicit hex colors instead of CSS variables for export compatibility */
+  forExport?: boolean;
 }
 
 // Scissors cursor as a data URI (modern minimalist scissors icon)
@@ -44,6 +46,7 @@ export function ElkEdges({
   batchEdgesOnly = false,
   taskEdgesOnly = false,
   pendingEdgeIds = new Set(),
+  forExport = false,
 }: ElkEdgesProps) {
   const [hoveredEdge, setHoveredEdge] = useState<string | null>(null);
 
@@ -80,16 +83,18 @@ export function ElkEdges({
           const isHovered = hoveredEdge === edge.id;
           const isPending = pendingEdgeIds.has(edge.id);
 
-          // Determine stroke color
-          let strokeColor = "var(--primary)";
+          // Determine stroke color (use hex for export compatibility)
+          let strokeColor = forExport ? "#3b82f6" : "var(--primary)";
           if (isPending) {
             strokeColor = isEditMode && isHovered ? mutedRed : pendingGreen;
           } else if (isEditMode && isHovered) {
             strokeColor = mutedRed;
           }
 
-          // Determine marker
-          let markerEnd = "url(#arrowhead-batch)";
+          // Determine marker (use export-specific markers when forExport)
+          let markerEnd = forExport
+            ? "url(#export-arrowhead-batch)"
+            : "url(#arrowhead-batch)";
           if (isPending) {
             markerEnd =
               isEditMode && isHovered
@@ -141,16 +146,18 @@ export function ElkEdges({
           const isHovered = hoveredEdge === edge.id;
           const isPending = pendingEdgeIds.has(edge.id);
 
-          // Determine stroke color
-          let strokeColor = "var(--muted-foreground)";
+          // Determine stroke color (use hex for export compatibility)
+          let strokeColor = forExport ? "#a1a1aa" : "var(--muted-foreground)";
           if (isPending) {
             strokeColor = isEditMode && isHovered ? mutedRed : pendingGreen;
           } else if (isEditMode && isHovered) {
             strokeColor = mutedRed;
           }
 
-          // Determine marker
-          let markerEnd = "url(#arrowhead)";
+          // Determine marker (use export-specific markers when forExport)
+          let markerEnd = forExport
+            ? "url(#export-arrowhead)"
+            : "url(#arrowhead)";
           if (isPending) {
             markerEnd =
               isEditMode && isHovered
@@ -202,8 +209,8 @@ export function ElkEdges({
           const isHovered = hoveredEdge === edge.id;
           const isPending = pendingEdgeIds.has(edge.id);
 
-          // Determine stroke color
-          let strokeColor = "var(--primary)";
+          // Determine stroke color (use hex for export compatibility)
+          let strokeColor = forExport ? "#3b82f6" : "var(--primary)";
           if (isPending) {
             strokeColor = isEditMode && isHovered ? mutedRed : pendingGreen;
           } else if (isEditMode && isHovered) {

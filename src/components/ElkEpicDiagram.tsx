@@ -58,7 +58,7 @@ export function ElkEpicDiagram({
       )}
 
       {/* Canvas Container */}
-      <div className="relative flex-1 min-h-0 rounded-lg border border-border bg-muted/20 overflow-hidden">
+      <div className="relative flex-1 min-h-0 border border-border bg-muted/20 overflow-hidden">
         {/* ELK Canvas with batches and dependency arrows */}
         <ElkCanvas
           epic={epic}

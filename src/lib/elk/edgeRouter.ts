@@ -48,23 +48,81 @@ function getTaskPorts(task: PositionedTask): {
 
 /**
  * Choose best ports for connecting two tasks
- * Prefers vertical connections (top/bottom) for down-flowing layouts
+ * Prefers vertical connections (top/bottom) for intra-batch tasks
+ * For inter-batch tasks, only uses left/right to avoid obscuring batch headers
  */
 function choosePorts(
   fromTask: PositionedTask,
   toTask: PositionedTask,
-  _isInterBatch: boolean,
-): { from: Point; to: Point } {
+  isInterBatch: boolean,
+): { from: Point; to: Point; forceHorizontalRoute?: boolean } {
   const fromPorts = getTaskPorts(fromTask);
   const toPorts = getTaskPorts(toTask);
 
-  // For vertical flow, prefer bottom -> top connections
   const fromCenter = getTaskCenter(fromTask);
   const toCenter = getTaskCenter(toTask);
 
   const dx = toCenter.x - fromCenter.x;
   const dy = toCenter.y - fromCenter.y;
 
+  // For inter-batch connections, only use left/right ports
+  // to avoid edges crossing over batch headers (top) or footers (bottom)
+  if (isInterBatch) {
+    // Only force horizontal routing when tasks are primarily vertically aligned
+    // (i.e., small horizontal offset but large vertical offset)
+    // This prevents edges from going through batch headers
+    const needsForcedRoute = Math.abs(dy) > Math.abs(dx) * 2;
+
+    // When forced routing is needed (vertically stacked batches),
+    // choose ports based on horizontal direction:
+    // - If target is to the right: exit right, enter left
+    // - If target is to the left: exit left, enter right
+    // - If roughly same x: both use left (original behavior)
+    if (needsForcedRoute) {
+      if (dx > 50) {
+        // Target is significantly to the right - exit right, enter left
+        return {
+          from: fromPorts.right,
+          to: toPorts.left,
+          forceHorizontalRoute: true,
+        };
+      } else if (dx < -50) {
+        // Target is significantly to the left - exit left, enter right
+        return {
+          from: fromPorts.left,
+          to: toPorts.right,
+          forceHorizontalRoute: true,
+        };
+      } else {
+        // Tasks are roughly vertically aligned - use left sides
+        return {
+          from: fromPorts.left,
+          to: toPorts.left,
+          forceHorizontalRoute: true,
+        };
+      }
+    }
+
+    // For regular inter-batch connections with enough horizontal offset,
+    // choose the side that makes the most sense based on relative position
+    if (dx >= 0) {
+      // Target is to the right
+      return {
+        from: fromPorts.right,
+        to: toPorts.left,
+        forceHorizontalRoute: false,
+      };
+    } else {
+      // Target is to the left
+      return {
+        from: fromPorts.left,
+        to: toPorts.right,
+        forceHorizontalRoute: false,
+      };
+    }
+  }
+
+  // For intra-batch connections, prefer vertical connections for down-flowing layouts
   // Determine primary direction
   if (Math.abs(dy) > Math.abs(dx)) {
     // Primarily vertical
@@ -90,15 +148,58 @@ function choosePorts(
 /**
  * Create an orthogonal path between two points
  * Uses a simple dogleg routing with one bend point
+ * When forceHorizontalRoute is true, ensures the path goes around horizontally
+ * even if the target is primarily vertical (for inter-batch connections)
  */
 function createOrthogonalPath(
   from: Point,
   to: Point,
   fromPort: "top" | "right" | "bottom" | "left",
   toPort: "top" | "right" | "bottom" | "left",
-  _spacing: number = 20,
+  spacing: number = 20,
+  forceHorizontalRoute: boolean = false,
 ): Point[] {
   const points: Point[] = [from];
+
+  // For inter-batch connections using horizontal ports, ensure the path
+  // goes around horizontally even if the target is primarily vertical
+  if (forceHorizontalRoute && (fromPort === "right" || fromPort === "left")) {
+    const horizontalOffset = spacing + 40; // Go out horizontally first
+
+    if (fromPort === "right" && toPort === "left") {
+      // Right to left: go right from source, then down/up, then to target's left
+      // The vertical segment should be positioned appropriately between source right and target left
+      // Use a point that's either just past the source (for close tasks) or just before the target
+      const turnX = Math.max(
+        from.x + horizontalOffset,
+        to.x - horizontalOffset,
+      );
+      points.push({ x: turnX, y: from.y }); // First go right from source
+      points.push({ x: turnX, y: to.y }); // Then go to target's Y level
+    } else if (fromPort === "left" && toPort === "right") {
+      // Left to right: go left from source, then down/up, then to target's right
+      // The vertical segment should be positioned appropriately between source left and target right
+      const turnX = Math.min(
+        from.x - horizontalOffset,
+        to.x + horizontalOffset,
+      );
+      points.push({ x: turnX, y: from.y }); // First go left from source
+      points.push({ x: turnX, y: to.y }); // Then go to target's Y level
+    } else if (fromPort === "right" && toPort === "right") {
+      // Both on right: go right from source, down/up, then back to target's right
+      const outX = Math.max(from.x, to.x) + horizontalOffset;
+      points.push({ x: outX, y: from.y });
+      points.push({ x: outX, y: to.y });
+    } else if (fromPort === "left" && toPort === "left") {
+      // Both on left: go left from source, down/up, then to target's left
+      const outX = Math.min(from.x, to.x) - horizontalOffset;
+      points.push({ x: outX, y: from.y });
+      points.push({ x: outX, y: to.y });
+    }
+
+    points.push(to);
+    return points;
+  }
 
   // Determine the mid-points based on port directions
   if (fromPort === "bottom" && toPort === "top") {
@@ -390,7 +491,11 @@ export function routeEdges(
       };
     }
 
-    const { from, to } = choosePorts(fromTask, toTask, edge.isInterBatch);
+    const { from, to, forceHorizontalRoute } = choosePorts(
+      fromTask,
+      toTask,
+      edge.isInterBatch,
+    );
 
     // Determine port directions
     const fromPorts = getTaskPorts(fromTask);
@@ -420,6 +525,7 @@ export function routeEdges(
       fromPort,
       toPort,
       config.nodeSpacing,
+      forceHorizontalRoute,
     );
 
     // Use smooth path for better aesthetics

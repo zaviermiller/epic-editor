@@ -334,19 +334,96 @@ function packGroupsIntoColumns(
     columns.get(depth)!.push(node);
   }
 
-  // Sort nodes within each column by their connection weights
-  // (to minimize vertical distance between connected nodes)
-  for (const [, nodes] of columns) {
-    nodes.sort((a, b) => {
-      const weightA = Array.from(a.connections.values()).reduce(
-        (sum, w) => sum + w,
-        0,
-      );
-      const weightB = Array.from(b.connections.values()).reduce(
-        (sum, w) => sum + w,
-        0,
-      );
-      return weightB - weightA;
+  // Sort nodes within each column to minimize edge crossings
+  // Strategy: Sort by the average row position of connected batches in the next column
+  // This ensures batches align vertically with their dependents
+
+  // First pass: collect which batches depend on which (for alignment)
+  // dependentsInNextCol[batchNum] = list of batch numbers in the next column that depend on it
+  const dependentsInNextCol = new Map<number, number[]>();
+
+  for (const batch of batches) {
+    const batchDepth = depths.get(batch.number) ?? 0;
+    for (const depNum of batch.dependsOn) {
+      const depDepth = depths.get(depNum) ?? 0;
+      // If the dependency is in the previous column
+      if (depDepth === batchDepth - 1) {
+        if (!dependentsInNextCol.has(depNum)) {
+          dependentsInNextCol.set(depNum, []);
+        }
+        dependentsInNextCol.get(depNum)!.push(batch.number);
+      }
+    }
+  }
+
+  // Process columns from right to left so we can position earlier columns
+  // based on where their dependents are placed
+  const batchRowPositions = new Map<number, number>();
+
+  // Start by assigning initial positions within each column based on connection priority
+  for (let col = maxDepth; col >= 0; col--) {
+    const nodesInColumn = columns.get(col) || [];
+
+    if (col === maxDepth) {
+      // Rightmost column: sort by total connections (most connected first)
+      nodesInColumn.sort((a, b) => {
+        const weightA = Array.from(a.connections.values()).reduce(
+          (sum, w) => sum + w,
+          0,
+        );
+        const weightB = Array.from(b.connections.values()).reduce(
+          (sum, w) => sum + w,
+          0,
+        );
+        return weightB - weightA;
+      });
+    } else {
+      // Earlier columns: sort by average row position of dependents in next column
+      nodesInColumn.sort((a, b) => {
+        const depsA = dependentsInNextCol.get(a.batchNumber) || [];
+        const depsB = dependentsInNextCol.get(b.batchNumber) || [];
+
+        // Calculate average row position of dependents
+        const avgRowA =
+          depsA.length > 0
+            ? depsA.reduce(
+                (sum, dep) => sum + (batchRowPositions.get(dep) ?? 0),
+                0,
+              ) / depsA.length
+            : 0;
+        const avgRowB =
+          depsB.length > 0
+            ? depsB.reduce(
+                (sum, dep) => sum + (batchRowPositions.get(dep) ?? 0),
+                0,
+              ) / depsB.length
+            : 0;
+
+        // If both have dependents, sort by their average row
+        if (depsA.length > 0 && depsB.length > 0) {
+          return avgRowA - avgRowB;
+        }
+
+        // If only one has dependents, prioritize the one with dependents (place it higher)
+        if (depsA.length > 0) return -1;
+        if (depsB.length > 0) return 1;
+
+        // Neither has dependents: sort by total connections
+        const weightA = Array.from(a.connections.values()).reduce(
+          (sum, w) => sum + w,
+          0,
+        );
+        const weightB = Array.from(b.connections.values()).reduce(
+          (sum, w) => sum + w,
+          0,
+        );
+        return weightB - weightA;
+      });
+    }
+
+    // Record row positions for this column
+    nodesInColumn.forEach((node, rowIndex) => {
+      batchRowPositions.set(node.batchNumber, rowIndex);
     });
   }
 

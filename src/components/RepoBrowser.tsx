@@ -354,7 +354,7 @@ export function RepoBrowser({
                     <button
                       key={repo.id}
                       onClick={() => loadIssues(repo)}
-                      className="w-full text-left p-3 rounded-lg border border-border hover:bg-accent hover:border-accent-foreground/20 transition-colors group"
+                      className="w-full text-left p-3 rounded-lg border border-border hover:bg-muted hover:border-muted-foreground/20 transition-colors cursor-pointer group"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
@@ -426,7 +426,7 @@ export function RepoBrowser({
                       <button
                         key={issue.number}
                         onClick={() => handleSelectEpic(issue)}
-                        className="w-full text-left p-3 rounded-lg border border-border hover:bg-accent hover:border-accent-foreground/20 transition-colors group"
+                        className="w-full text-left p-3 rounded-lg border border-border hover:bg-muted hover:border-muted-foreground/20 transition-colors cursor-pointer group"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">

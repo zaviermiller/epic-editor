@@ -109,6 +109,7 @@ export function ElkCanvas({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Interaction state
   const [highlightedTask, setHighlightedTask] = useState<number | null>(null);
@@ -593,6 +594,7 @@ export function ElkCanvas({
 
   // Refs
   const containerRef = useRef<HTMLDivElement>(null);
+  const exportRef = useRef<HTMLDivElement>(null);
   const isPanning = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
   const hasInitialLayout = useRef(false);
@@ -879,6 +881,152 @@ export function ElkCanvas({
 
     setTransform({ x, y, scale });
   }, [layout]);
+
+  // Export diagram as PNG using native SVG serialization (avoids html2canvas color parsing issues)
+  const handleExport = useCallback(async () => {
+    if (!exportRef.current || !layout) return;
+
+    setIsExporting(true);
+
+    try {
+      const exportContainer = exportRef.current;
+      const svgElement = exportContainer.querySelector("svg");
+
+      if (!svgElement) {
+        console.error("No SVG element found for export");
+        setIsExporting(false);
+        return;
+      }
+
+      // Clone the SVG to avoid modifying the original
+      const svgClone = svgElement.cloneNode(true) as SVGSVGElement;
+
+      // Add background rect as first child
+      const bgRect = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "rect",
+      );
+      bgRect.setAttribute("width", "100%");
+      bgRect.setAttribute("height", "100%");
+      bgRect.setAttribute("fill", "#09090b");
+      svgClone.insertBefore(bgRect, svgClone.firstChild);
+
+      // Create a canvas
+      const canvas = document.createElement("canvas");
+      const scale = 2; // Higher resolution
+      const padding = 24;
+      const legendWidth = 120;
+      const legendHeight = 100;
+
+      canvas.width = (layout.canvasWidth + legendWidth + padding * 3) * scale;
+      canvas.height = (layout.canvasHeight + padding * 2) * scale;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        console.error("Could not get canvas context");
+        setIsExporting(false);
+        return;
+      }
+
+      // Fill background
+      ctx.fillStyle = "#09090b";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Serialize SVG to string
+      const serializer = new XMLSerializer();
+      const svgString = serializer.serializeToString(svgClone);
+
+      // Create a blob and URL for the SVG
+      const svgBlob = new Blob([svgString], {
+        type: "image/svg+xml;charset=utf-8",
+      });
+      const svgUrl = URL.createObjectURL(svgBlob);
+
+      // Load SVG as image
+      const svgImage = new Image();
+      svgImage.onload = () => {
+        // Draw SVG
+        ctx.drawImage(
+          svgImage,
+          padding * scale,
+          padding * scale,
+          layout.canvasWidth * scale,
+          layout.canvasHeight * scale,
+        );
+
+        // Draw legend manually
+        const legendX = (layout.canvasWidth + padding * 2) * scale;
+        const legendY = padding * scale;
+
+        // Legend background
+        ctx.fillStyle = "#18181b";
+        ctx.strokeStyle = "#27272a";
+        ctx.lineWidth = 1 * scale;
+        ctx.beginPath();
+        ctx.roundRect(
+          legendX,
+          legendY,
+          legendWidth * scale,
+          legendHeight * scale,
+          6 * scale,
+        );
+        ctx.fill();
+        ctx.stroke();
+
+        // Legend items
+        const statusItems = [
+          { label: "Not Planned", color: "#9ca3af" },
+          { label: "Planned", color: "#3b82f6" },
+          { label: "In Progress", color: "#facc15" },
+          { label: "Done", color: "#22c55e" },
+        ];
+
+        ctx.font = `${11 * scale}px system-ui, -apple-system, sans-serif`;
+
+        statusItems.forEach((item, index) => {
+          const itemY = legendY + (16 + index * 20) * scale;
+
+          // Color box
+          ctx.fillStyle = item.color;
+          ctx.beginPath();
+          ctx.roundRect(
+            legendX + 12 * scale,
+            itemY,
+            12 * scale,
+            12 * scale,
+            2 * scale,
+          );
+          ctx.fill();
+
+          // Label
+          ctx.fillStyle = "#fafafa";
+          ctx.fillText(item.label, legendX + 32 * scale, itemY + 10 * scale);
+        });
+
+        // Download
+        const dataUrl = canvas.toDataURL("image/png");
+        const link = document.createElement("a");
+        link.download = `${epic.title.replace(/[^a-z0-9]/gi, "-").toLowerCase()}-diagram.png`;
+        link.href = dataUrl;
+        link.click();
+
+        // Cleanup
+        URL.revokeObjectURL(svgUrl);
+        setIsExporting(false);
+      };
+
+      svgImage.onerror = (err) => {
+        console.error("Failed to load SVG for export:", err);
+        URL.revokeObjectURL(svgUrl);
+        setIsExporting(false);
+      };
+
+      svgImage.src = svgUrl;
+    } catch (err) {
+      console.error("Failed to export diagram:", err);
+      setIsExporting(false);
+    }
+  }, [layout, epic.title]);
 
   // Find original task data
   const findTask = useCallback(
@@ -1297,13 +1445,13 @@ export function ElkCanvas({
         <div className="flex gap-2 mb-2">
           <button
             onClick={handleFitToView}
-            className="px-3 py-1.5 text-xs font-medium bg-card border border-border rounded-md hover:bg-muted transition-colors"
+            className="px-3 py-1.5 text-xs font-medium bg-card border border-border rounded-md hover:bg-muted transition-colors cursor-pointer"
           >
             Fit
           </button>
           <button
             onClick={handleResetView}
-            className="px-3 py-1.5 text-xs font-medium bg-card border border-border rounded-md hover:bg-muted transition-colors"
+            className="px-3 py-1.5 text-xs font-medium bg-card border border-border rounded-md hover:bg-muted transition-colors cursor-pointer"
           >
             Reset
           </button>
@@ -1322,14 +1470,14 @@ export function ElkCanvas({
             <button
               onClick={handleClearChanges}
               disabled={isSaving}
-              className="px-4 py-2 text-sm font-medium bg-card border border-border text-foreground rounded-lg hover:bg-muted transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 text-sm font-medium bg-card border border-border text-foreground rounded-lg hover:bg-muted transition-colors shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Clear Changes
             </button>
             <button
               onClick={handleSave}
               disabled={isSaving || !api}
-              className="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {isSaving ? (
                 <>
@@ -1347,6 +1495,8 @@ export function ElkCanvas({
         <CanvasToolbar
           activeTool={activeTool}
           onToolChange={handleToolChange}
+          onExport={handleExport}
+          isExporting={isExporting}
         />
       </div>
 
@@ -1575,6 +1725,8 @@ export function ElkCanvas({
             isDropTarget={dropTargetBatch === batch.batchNumber}
             onClick={handleBatchClick}
             onDrop={handleBatchDrop}
+            owner={epic.owner}
+            repo={epic.repo}
           />
         ))}
 
@@ -1639,6 +1791,126 @@ export function ElkCanvas({
           );
         })}
       </svg>
+
+      {/* Hidden Export Container - used for PNG export */}
+      <div
+        ref={exportRef}
+        data-export-container
+        className="fixed -left-[9999px] -top-[9999px] p-6"
+        style={{
+          width: layout.canvasWidth + 200,
+          height: layout.canvasHeight + 48,
+          backgroundColor: "#09090b", // Explicit hex instead of bg-background (oklch)
+        }}
+        aria-hidden="true"
+      >
+        {/* Legend positioned in top-right corner */}
+        <div className="absolute top-6 right-6">
+          <StatusLegend forExport />
+        </div>
+
+        {/* Static SVG copy for export */}
+        <svg
+          width={layout.canvasWidth}
+          height={layout.canvasHeight}
+          viewBox={`0 0 ${layout.canvasWidth} ${layout.canvasHeight}`}
+        >
+          {/* Definitions */}
+          <defs>
+            <marker
+              id="export-arrowhead"
+              markerWidth="10"
+              markerHeight="10"
+              refX="9"
+              refY="5"
+              orient="auto"
+              markerUnits="userSpaceOnUse"
+            >
+              <polyline
+                points="1 1, 9 5, 1 9"
+                fill="none"
+                stroke="#a1a1aa"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </marker>
+            <marker
+              id="export-arrowhead-batch"
+              markerWidth="12"
+              markerHeight="12"
+              refX="10"
+              refY="6"
+              orient="auto"
+              markerUnits="userSpaceOnUse"
+            >
+              <polyline
+                points="2 2, 10 6, 2 10"
+                fill="none"
+                stroke="#3b82f6"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </marker>
+          </defs>
+
+          {/* Batch-to-batch edges */}
+          <ElkEdges
+            edges={visibleEdges}
+            highlightedEdges={new Set()}
+            hasHighlightedTask={false}
+            isEditMode={false}
+            batchEdgesOnly={true}
+            pendingEdgeIds={new Set()}
+            forExport={true}
+          />
+
+          {/* Batch groups */}
+          {layout.batches.map((batch) => (
+            <ElkBatchGroup
+              key={`export-${batch.id}`}
+              batch={batch}
+              isHighlighted={false}
+              isEditMode={false}
+              isEditModeSelected={false}
+              isMoveMode={false}
+              isDragActive={false}
+              isDropTarget={false}
+              forExport={true}
+              owner={epic.owner}
+              repo={epic.repo}
+            />
+          ))}
+
+          {/* Task edges */}
+          <ElkEdges
+            edges={visibleEdges}
+            highlightedEdges={new Set()}
+            hasHighlightedTask={false}
+            isEditMode={false}
+            taskEdgesOnly={true}
+            pendingEdgeIds={new Set()}
+            forExport={true}
+          />
+
+          {/* Task nodes */}
+          {layout.tasks.map((task) => (
+            <ElkTaskNode
+              key={`export-${task.id}`}
+              task={task}
+              isHighlighted={false}
+              isRelated={false}
+              isDimmed={false}
+              isEditModeSelected={false}
+              isEditMode={false}
+              isMoveMode={false}
+              isDragging={false}
+              pendingMove={null}
+            />
+          ))}
+        </svg>
+      </div>
     </div>
   );
 }

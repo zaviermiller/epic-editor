@@ -12,7 +12,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { GrabberIcon, LinkIcon, ArrowSwitchIcon } from "@primer/octicons-react";
+import {
+  GrabberIcon,
+  LinkIcon,
+  ArrowSwitchIcon,
+  DownloadIcon,
+} from "@primer/octicons-react";
 
 export type ToolType = "select" | "edit-relationships" | "move-issue";
 
@@ -21,6 +26,10 @@ interface CanvasToolbarProps {
   activeTool: ToolType;
   /** Callback when a tool is selected */
   onToolChange: (tool: ToolType) => void;
+  /** Callback when export button is clicked */
+  onExport?: () => void;
+  /** Whether export is in progress */
+  isExporting?: boolean;
   /** Class name for additional styling */
   className?: string;
 }
@@ -39,7 +48,7 @@ function ToolButton({ icon, label, isActive, onClick }: ToolButtonProps) {
         <button
           onClick={onClick}
           className={`
-            flex items-center justify-center w-9 h-9 rounded-md transition-colors
+            flex items-center justify-center w-9 h-9 rounded-md transition-colors cursor-pointer
             ${
               isActive
                 ? "bg-primary text-primary-foreground"
@@ -61,6 +70,8 @@ function ToolButton({ icon, label, isActive, onClick }: ToolButtonProps) {
 export function CanvasToolbar({
   activeTool,
   onToolChange,
+  onExport,
+  isExporting = false,
   className = "",
 }: CanvasToolbarProps) {
   const tools: { type: ToolType; icon: React.ReactNode; label: string }[] = [
@@ -97,6 +108,35 @@ export function CanvasToolbar({
           onClick={() => onToolChange(tool.type)}
         />
       ))}
+
+      {/* Separator */}
+      <div className="w-px h-6 bg-border mx-1" />
+
+      {/* Export button */}
+      {onExport && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={onExport}
+              disabled={isExporting}
+              className={`
+                flex items-center justify-center w-9 h-9 rounded-md transition-colors cursor-pointer
+                hover:bg-muted text-muted-foreground hover:text-foreground
+                disabled:opacity-50 disabled:cursor-not-allowed
+              `}
+              aria-label="Export as Image"
+            >
+              <DownloadIcon
+                size={18}
+                className={isExporting ? "animate-pulse" : ""}
+              />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" sideOffset={8}>
+            {isExporting ? "Exporting..." : "Export as PNG"}
+          </TooltipContent>
+        </Tooltip>
+      )}
     </div>
   );
 }

@@ -29,6 +29,12 @@ interface ElkBatchGroupProps {
   onClick?: (batchNumber: number) => void;
   /** Called when a task is dropped on this batch */
   onDrop?: (batchNumber: number) => void;
+  /** When true, uses explicit hex colors for export compatibility */
+  forExport?: boolean;
+  /** Repository owner for constructing GitHub URLs */
+  owner?: string;
+  /** Repository name for constructing GitHub URLs */
+  repo?: string;
 }
 
 // Connection+ cursor as a data URI (link icon with plus)
@@ -63,8 +69,12 @@ export function ElkBatchGroup({
   isDropTarget = false,
   onClick,
   onDrop,
+  forExport = false,
+  owner,
+  repo,
 }: ElkBatchGroupProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const [isTitleHovered, setIsTitleHovered] = useState(false);
   const headerBg = getHeaderBgColor(batch.status);
 
   const headerHeight = 50;
@@ -224,21 +234,60 @@ export function ElkBatchGroup({
       />
 
       {/* Batch title */}
-      <text
-        x={batch.x + 16}
-        y={batch.y + 22}
-        className="fill-foreground text-sm font-semibold pointer-events-none"
-        style={{ fontSize: "13px", fontWeight: 600 }}
-      >
-        {batch.title}
-      </text>
+      {owner && repo && batch.batchNumber > 0 ? (
+        <a
+          href={`https://github.com/${owner}/${repo}/issues/${batch.batchNumber}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ cursor: "pointer" }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <text
+            x={batch.x + 16}
+            y={batch.y + 22}
+            className={forExport ? "" : "fill-foreground text-sm font-semibold"}
+            style={{
+              fontSize: "13px",
+              fontWeight: 600,
+              fill: forExport ? "#fafafa" : undefined,
+              cursor: "pointer",
+              textDecoration: isTitleHovered ? "underline" : "none",
+            }}
+            onMouseEnter={() => setIsTitleHovered(true)}
+            onMouseLeave={() => setIsTitleHovered(false)}
+          >
+            {batch.title}
+          </text>
+        </a>
+      ) : (
+        <text
+          x={batch.x + 16}
+          y={batch.y + 22}
+          className={
+            forExport
+              ? "pointer-events-none"
+              : "fill-foreground text-sm font-semibold pointer-events-none"
+          }
+          style={{
+            fontSize: "13px",
+            fontWeight: 600,
+            fill: forExport ? "#fafafa" : undefined,
+          }}
+        >
+          {batch.title}
+        </text>
+      )}
 
       {/* Batch number and progress */}
       <text
         x={batch.x + 16}
         y={batch.y + 40}
-        className="fill-muted-foreground pointer-events-none"
-        style={{ fontSize: "11px" }}
+        className={
+          forExport
+            ? "pointer-events-none"
+            : "fill-muted-foreground pointer-events-none"
+        }
+        style={{ fontSize: "11px", fill: forExport ? "#a1a1aa" : undefined }}
       >
         {isSyntheticBatch ? "" : `#${batch.batchNumber} • `}
         {batch.progress}% complete
@@ -251,7 +300,12 @@ export function ElkBatchGroup({
         width={64}
         height={6}
         rx={3}
-        className="fill-muted/50 pointer-events-none"
+        className={
+          forExport
+            ? "pointer-events-none"
+            : "fill-muted/50 pointer-events-none"
+        }
+        style={forExport ? { fill: "#27272a80" } : undefined}
       />
       {/* Progress bar fill */}
       <rect
@@ -260,13 +314,29 @@ export function ElkBatchGroup({
         width={Math.max(0, (batch.progress / 100) * 64)}
         height={6}
         rx={3}
-        className={`pointer-events-none ${
-          batch.status === "done"
-            ? "fill-green-500"
-            : batch.status === "in-progress"
-              ? "fill-yellow-400"
-              : "fill-blue-500"
-        }`}
+        className={
+          forExport
+            ? "pointer-events-none"
+            : `pointer-events-none ${
+                batch.status === "done"
+                  ? "fill-green-500"
+                  : batch.status === "in-progress"
+                    ? "fill-yellow-400"
+                    : "fill-blue-500"
+              }`
+        }
+        style={
+          forExport
+            ? {
+                fill:
+                  batch.status === "done"
+                    ? "#22c55e"
+                    : batch.status === "in-progress"
+                      ? "#facc15"
+                      : "#3b82f6",
+              }
+            : undefined
+        }
       />
     </g>
   );

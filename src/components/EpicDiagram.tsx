@@ -9,7 +9,8 @@
 "use client";
 
 import { useRef, useState, useCallback, useEffect } from "react";
-import { Epic, Task, IssueStatus } from "@/types";
+import { Epic, Task } from "@/types";
+import { getStatusBgClass, getStatusTextClass } from "@/lib/statusUtils";
 import { EpicCanvas } from "./EpicCanvas";
 import { StatusLegend } from "./StatusLegend";
 import { Button } from "@/components/ui/button";
@@ -30,38 +31,6 @@ interface DragState {
   currentY: number;
   offsetX: number;
   offsetY: number;
-}
-
-/**
- * Get background color class based on status
- */
-function getStatusBgColor(status: IssueStatus): string {
-  switch (status) {
-    case "done":
-      return "bg-green-500";
-    case "in-progress":
-      return "bg-yellow-400";
-    case "planned":
-      return "bg-blue-500";
-    case "not-planned":
-      return "bg-gray-400";
-  }
-}
-
-/**
- * Get text color class based on status (for contrast)
- */
-function getStatusTextColor(status: IssueStatus): string {
-  switch (status) {
-    case "done":
-      return "text-white";
-    case "in-progress":
-      return "text-gray-900";
-    case "planned":
-      return "text-white";
-    case "not-planned":
-      return "text-white";
-  }
 }
 
 interface EpicDiagramProps {
@@ -283,7 +252,7 @@ export function EpicDiagram({ epic, onTaskClick }: EpicDiagramProps) {
           >
             <div
               className={`
-                ${getStatusBgColor(taskDrag.task.status)} ${getStatusTextColor(taskDrag.task.status)}
+                ${getStatusBgClass(taskDrag.task.status)} ${getStatusTextClass(taskDrag.task.status)}
                 rounded-md px-3 py-2
                 text-xs font-medium leading-snug
                 shadow-xl ring-2 ring-white ring-offset-2 ring-offset-background

@@ -5,36 +5,7 @@
  */
 
 import { Task } from "@/types";
-
-/**
- * Get Tailwind background color class based on status
- */
-function getStatusBgClass(status: string): string {
-  switch (status) {
-    case "done":
-      return "bg-green-500";
-    case "in-progress":
-      return "bg-yellow-400";
-    case "planned":
-      return "bg-blue-500";
-    case "not-planned":
-      return "bg-gray-400";
-    default:
-      return "bg-gray-400";
-  }
-}
-
-/**
- * Get Tailwind text color class based on status
- */
-function getStatusTextClass(status: string): string {
-  switch (status) {
-    case "in-progress":
-      return "text-gray-900";
-    default:
-      return "text-white";
-  }
-}
+import { getStatusBgClass, getStatusTextClass } from "@/lib/statusUtils";
 
 interface DragGhostElementProps {
   task: Task;

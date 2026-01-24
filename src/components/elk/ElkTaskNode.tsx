@@ -9,7 +9,7 @@
 "use client";
 
 import { PositionedTask } from "@/lib/elk";
-import { IssueStatus } from "@/types";
+import { getStatusHexColors } from "@/lib/statusUtils";
 
 interface ElkTaskNodeProps {
   task: PositionedTask;
@@ -38,42 +38,6 @@ interface ElkTaskNodeProps {
 
 // Connection+ cursor as a data URI (link icon with plus) - white color
 const connectionCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/%3E%3Cpath d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/%3E%3Ccircle cx='19' cy='5' r='4' fill='%23ffffff' stroke='none'/%3E%3Cpath d='M19 3v4M17 5h4' stroke='%23000000' stroke-width='1.5'/%3E%3C/svg%3E") 12 12, pointer`;
-
-/**
- * Get background color based on status
- */
-function getStatusColors(status: IssueStatus): {
-  bg: string;
-  text: string;
-  border: string;
-} {
-  switch (status) {
-    case "done":
-      return {
-        bg: "#22c55e", // green-500
-        text: "#ffffff",
-        border: "#16a34a", // green-600
-      };
-    case "in-progress":
-      return {
-        bg: "#facc15", // yellow-400
-        text: "#1f2937", // gray-800
-        border: "#eab308", // yellow-500
-      };
-    case "planned":
-      return {
-        bg: "#3b82f6", // blue-500
-        text: "#ffffff",
-        border: "#2563eb", // blue-600
-      };
-    case "not-planned":
-      return {
-        bg: "#9ca3af", // gray-400
-        text: "#ffffff",
-        border: "#6b7280", // gray-500
-      };
-  }
-}
 
 /**
  * Wrap text for SVG rendering
@@ -132,7 +96,7 @@ export function ElkTaskNode({
   onDragEnd,
   onCancelMove,
 }: ElkTaskNodeProps) {
-  const colors = getStatusColors(task.status);
+  const colors = getStatusHexColors(task.status);
   const cornerRadius = 6;
   const padding = { x: 12, y: 8 };
   const fontSize = 12;

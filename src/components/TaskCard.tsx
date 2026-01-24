@@ -7,7 +7,8 @@
 
 "use client";
 
-import { Task, IssueStatus } from "@/types";
+import { Task } from "@/types";
+import { getStatusBgClass, getStatusTextClass } from "@/lib/statusUtils";
 import {
   Tooltip,
   TooltipContent,
@@ -37,38 +38,6 @@ interface TaskCardProps {
   fixedWidth?: number;
 }
 
-/**
- * Get background color class based on status
- */
-function getStatusBgColor(status: IssueStatus): string {
-  switch (status) {
-    case "done":
-      return "bg-green-500";
-    case "in-progress":
-      return "bg-yellow-400";
-    case "planned":
-      return "bg-blue-500";
-    case "not-planned":
-      return "bg-gray-400";
-  }
-}
-
-/**
- * Get text color class based on status (for contrast)
- */
-function getStatusTextColor(status: IssueStatus): string {
-  switch (status) {
-    case "done":
-      return "text-white";
-    case "in-progress":
-      return "text-gray-900";
-    case "planned":
-      return "text-white";
-    case "not-planned":
-      return "text-white";
-  }
-}
-
 export function TaskCard({
   task,
   isHighlighted = false,
@@ -78,8 +47,8 @@ export function TaskCard({
   onDragStart,
   fixedWidth,
 }: TaskCardProps) {
-  const bgColor = getStatusBgColor(task.status);
-  const textColor = getStatusTextColor(task.status);
+  const bgColor = getStatusBgClass(task.status);
+  const textColor = getStatusTextClass(task.status);
 
   // Style object for fixed width (used in canvas mode)
   const dimensionStyle = fixedWidth

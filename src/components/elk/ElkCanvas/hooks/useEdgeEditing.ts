@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback, useMemo } from "react";
-import { Epic } from "@/types";
+import { Epic, Task } from "@/types";
 import { ElkLayoutResult } from "@/lib/elk";
 import { EdgeChange } from "../types";
 
@@ -13,6 +13,8 @@ interface UseEdgeEditingOptions {
   epic: Epic;
   layout: ElkLayoutResult | null;
   isEditMode: boolean;
+  /** Callback when a task is clicked in non-edit mode */
+  onTaskClick?: (task: Task) => void;
 }
 
 interface UseEdgeEditingReturn {
@@ -56,6 +58,7 @@ export function useEdgeEditing({
   epic,
   layout,
   isEditMode,
+  onTaskClick,
 }: UseEdgeEditingOptions): UseEdgeEditingReturn {
   // Task edge state
   const [editModeSourceTask, setEditModeSourceTask] = useState<number | null>(
@@ -71,6 +74,18 @@ export function useEdgeEditing({
   const [pendingBatchEdges, setPendingBatchEdges] = useState<EdgeChange[]>([]);
   const [removedBatchEdges, setRemovedBatchEdges] = useState<Set<string>>(
     new Set(),
+  );
+
+  // Helper to find a task by number
+  const findTask = useCallback(
+    (taskNumber: number): Task | undefined => {
+      for (const batch of epic.batches) {
+        const task = batch.tasks.find((t) => t.number === taskNumber);
+        if (task) return task;
+      }
+      return undefined;
+    },
+    [epic],
   );
 
   // Compute original task edges from the epic for comparison
@@ -119,10 +134,17 @@ export function useEdgeEditing({
     });
   }, [layout, removedEdges, removedBatchEdges]);
 
-  // Handle task click in edit mode
+  // Handle task click - different behavior based on mode
   const handleTaskClick = useCallback(
     (taskNumber: number) => {
-      if (!isEditMode) return;
+      if (!isEditMode) {
+        // Non-edit mode: call the onTaskClick callback
+        const task = findTask(taskNumber);
+        if (task && onTaskClick) {
+          onTaskClick(task);
+        }
+        return;
+      }
 
       // Clear any batch source selection when clicking a task
       setEditModeSourceBatch(null);
@@ -168,7 +190,15 @@ export function useEdgeEditing({
         setEditModeSourceTask(null);
       }
     },
-    [isEditMode, editModeSourceTask, layout, pendingEdges, removedEdges],
+    [
+      isEditMode,
+      editModeSourceTask,
+      layout,
+      pendingEdges,
+      removedEdges,
+      findTask,
+      onTaskClick,
+    ],
   );
 
   // Handle batch click in edit mode

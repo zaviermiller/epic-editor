@@ -12,6 +12,7 @@
 
 import { Badge } from "@/components/ui/badge";
 import { IssueStatus } from "@/types";
+import { getStatusLabel } from "@/lib/statusUtils";
 import {
   CheckCircleFillIcon,
   IssueOpenedIcon,
@@ -37,22 +38,6 @@ function getStatusIcon(status: IssueStatus) {
       return <IssueOpenedIcon size={12} />;
     case "not-planned":
       return <SkipIcon size={12} />;
-  }
-}
-
-/**
- * Get the display label for a status
- */
-function getStatusLabel(status: IssueStatus): string {
-  switch (status) {
-    case "done":
-      return "Done";
-    case "in-progress":
-      return "In Progress";
-    case "planned":
-      return "Planned";
-    case "not-planned":
-      return "Not Planned";
   }
 }
 

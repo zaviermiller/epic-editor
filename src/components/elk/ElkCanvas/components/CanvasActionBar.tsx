@@ -5,15 +5,12 @@
  */
 
 import { SyncIcon } from "@primer/octicons-react";
-import { CanvasToolbar } from "../../CanvasToolbar";
-import { GitHubApi } from "@/lib/github";
-import { useTool } from "../context";
+import { CanvasToolbar } from "./CanvasToolbar";
+import { useTool, useEpicContext } from "../context";
 
 interface CanvasActionBarProps {
   hasChanges: boolean;
   isSaving: boolean;
-  isExporting: boolean;
-  api?: GitHubApi;
   onSave: () => void;
   onClearChanges: () => void;
   onExport: () => void;
@@ -22,13 +19,12 @@ interface CanvasActionBarProps {
 export function CanvasActionBar({
   hasChanges,
   isSaving,
-  isExporting,
-  api,
   onSave,
   onClearChanges,
   onExport,
 }: CanvasActionBarProps) {
   const { activeTool, setActiveTool } = useTool();
+  const { api, isExporting } = useEpicContext();
   return (
     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2">
       {/* Save/Clear buttons - only shown when there are changes */}

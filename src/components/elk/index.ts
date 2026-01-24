@@ -9,5 +9,5 @@ export type { SaveResult } from "./ElkCanvas";
 export { ElkBatchGroup } from "./ElkBatchGroup";
 export { ElkTaskNode } from "./ElkTaskNode";
 export { ElkEdges } from "./ElkEdges";
-export { CanvasToolbar } from "./CanvasToolbar";
-export type { ToolType } from "./CanvasToolbar";
+export { CanvasToolbar } from "./ElkCanvas/components/CanvasToolbar";
+export type { ToolType } from "./ElkCanvas/components/CanvasToolbar";

@@ -11,6 +11,7 @@ import { useEffect, useState, useCallback, use, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { ElkEpicDiagram } from "@/components/ElkEpicDiagram";
 import { SaveResult } from "@/components/elk/ElkCanvas";
+import { EpicProvider } from "@/contexts";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import {
@@ -447,100 +448,102 @@ export default function VisPage({ params }: VisPageProps) {
                 Refreshing...
               </div>
             )}
-            <ElkEpicDiagram
-              epic={epic}
-              onTaskClick={handleTaskClick}
-              onSave={(result) => {
-                setSaveResult(result);
+            <EpicProvider epic={epic} api={api}>
+              <ElkEpicDiagram
+                epic={epic}
+                onTaskClick={handleTaskClick}
+                onSave={(result) => {
+                  setSaveResult(result);
 
-                // Apply changes optimistically to the epic state
-                if (result.addedCount > 0 || result.removedCount > 0) {
-                  setEpic((prevEpic) => {
-                    if (!prevEpic) return prevEpic;
+                  // Apply changes optimistically to the epic state
+                  if (result.addedCount > 0 || result.removedCount > 0) {
+                    setEpic((prevEpic) => {
+                      if (!prevEpic) return prevEpic;
 
-                    // Deep clone the epic
-                    const updatedEpic: Epic = JSON.parse(
-                      JSON.stringify(prevEpic),
-                    );
+                      // Deep clone the epic
+                      const updatedEpic: Epic = JSON.parse(
+                        JSON.stringify(prevEpic),
+                      );
 
-                    // Apply added task edges
-                    for (const edge of result.addedTaskEdges) {
-                      // edge.from blocks edge.to, so edge.to depends on edge.from
-                      // Add to dependencies array
-                      if (
-                        !updatedEpic.dependencies.some(
-                          (d) => d.from === edge.to && d.to === edge.from,
-                        )
-                      ) {
-                        updatedEpic.dependencies.push({
-                          from: edge.to,
-                          to: edge.from,
-                          type: "depends-on",
-                        });
-                      }
-                      // Add to task's dependsOn array
-                      for (const batch of updatedEpic.batches) {
-                        const task = batch.tasks.find(
-                          (t) => t.number === edge.to,
-                        );
-                        if (task && !task.dependsOn.includes(edge.from)) {
-                          task.dependsOn.push(edge.from);
+                      // Apply added task edges
+                      for (const edge of result.addedTaskEdges) {
+                        // edge.from blocks edge.to, so edge.to depends on edge.from
+                        // Add to dependencies array
+                        if (
+                          !updatedEpic.dependencies.some(
+                            (d) => d.from === edge.to && d.to === edge.from,
+                          )
+                        ) {
+                          updatedEpic.dependencies.push({
+                            from: edge.to,
+                            to: edge.from,
+                            type: "depends-on",
+                          });
+                        }
+                        // Add to task's dependsOn array
+                        for (const batch of updatedEpic.batches) {
+                          const task = batch.tasks.find(
+                            (t) => t.number === edge.to,
+                          );
+                          if (task && !task.dependsOn.includes(edge.from)) {
+                            task.dependsOn.push(edge.from);
+                          }
                         }
                       }
-                    }
 
-                    // Apply added batch edges
-                    for (const edge of result.addedBatchEdges) {
-                      const batch = updatedEpic.batches.find(
-                        (b) => b.number === edge.to,
-                      );
-                      if (batch && !batch.dependsOn.includes(edge.from)) {
-                        batch.dependsOn.push(edge.from);
+                      // Apply added batch edges
+                      for (const edge of result.addedBatchEdges) {
+                        const batch = updatedEpic.batches.find(
+                          (b) => b.number === edge.to,
+                        );
+                        if (batch && !batch.dependsOn.includes(edge.from)) {
+                          batch.dependsOn.push(edge.from);
+                        }
                       }
-                    }
 
-                    // Apply removed task edges
-                    for (const edge of result.removedTaskEdges) {
-                      // Remove from dependencies array
-                      updatedEpic.dependencies =
-                        updatedEpic.dependencies.filter(
-                          (d) => !(d.from === edge.to && d.to === edge.from),
+                      // Apply removed task edges
+                      for (const edge of result.removedTaskEdges) {
+                        // Remove from dependencies array
+                        updatedEpic.dependencies =
+                          updatedEpic.dependencies.filter(
+                            (d) => !(d.from === edge.to && d.to === edge.from),
+                          );
+                        // Remove from task's dependsOn array
+                        for (const batch of updatedEpic.batches) {
+                          const task = batch.tasks.find(
+                            (t) => t.number === edge.to,
+                          );
+                          if (task) {
+                            task.dependsOn = task.dependsOn.filter(
+                              (d) => d !== edge.from,
+                            );
+                          }
+                        }
+                      }
+
+                      // Apply removed batch edges
+                      for (const edge of result.removedBatchEdges) {
+                        const batch = updatedEpic.batches.find(
+                          (b) => b.number === edge.to,
                         );
-                      // Remove from task's dependsOn array
-                      for (const batch of updatedEpic.batches) {
-                        const task = batch.tasks.find(
-                          (t) => t.number === edge.to,
-                        );
-                        if (task) {
-                          task.dependsOn = task.dependsOn.filter(
+                        if (batch) {
+                          batch.dependsOn = batch.dependsOn.filter(
                             (d) => d !== edge.from,
                           );
                         }
                       }
-                    }
 
-                    // Apply removed batch edges
-                    for (const edge of result.removedBatchEdges) {
-                      const batch = updatedEpic.batches.find(
-                        (b) => b.number === edge.to,
-                      );
-                      if (batch) {
-                        batch.dependsOn = batch.dependsOn.filter(
-                          (d) => d !== edge.from,
-                        );
-                      }
-                    }
+                      return updatedEpic;
+                    });
 
-                    return updatedEpic;
-                  });
-
-                  // Do a background refresh to sync with server
-                  fetchEpic(true);
-                }
-              }}
-              api={api}
-              showHeader={false}
-            />
+                    // Do a background refresh to sync with server
+                    fetchEpic(true);
+                  }
+                }}
+                api={api}
+                showHeader={false}
+              />
+            </EpicProvider>
           </div>
         )}
 

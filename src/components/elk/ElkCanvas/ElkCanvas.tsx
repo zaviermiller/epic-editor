@@ -7,12 +7,12 @@
 
 "use client";
 
-import { useRef, useCallback, useState, useMemo, useEffect } from "react";
+import { useRef, useCallback, useMemo, useEffect } from "react";
 import { Task } from "@/types";
 import { DEFAULT_ELK_CONFIG } from "@/lib/elk";
 
 // Context
-import { ToolProvider, useTool } from "./context";
+import { useEpicContext } from "./context";
 
 // Hooks
 import {
@@ -60,9 +60,9 @@ function ElkCanvasInner({
   const containerRef = useRef<HTMLDivElement>(null);
   const exportRef = useRef<HTMLDivElement>(null);
 
-  // Tool state from context
-  const { isEditMode, isMoveMode, registerToolChangeCallback } = useTool();
-  const [isExporting, setIsExporting] = useState(false);
+  // State from context
+  const { isEditMode, isMoveMode, registerToolChangeCallback, setIsExporting } =
+    useEpicContext();
 
   // Canvas transform (pan/zoom)
   const {
@@ -383,18 +383,21 @@ function ElkCanvasInner({
     ],
   );
 
+  // Extract for stable reference in useEffect
+  const onToolChangeCleanup = taskMovement.handleTaskDragEnd;
+
   // Register cleanup callback for tool changes
   useEffect(() => {
     registerToolChangeCallback(() => {
       setEditModeSourceTask(null);
       setEditModeSourceBatch(null);
-      taskMovement.handleTaskDragEnd();
+      onToolChangeCleanup();
     });
   }, [
     registerToolChangeCallback,
     setEditModeSourceTask,
     setEditModeSourceBatch,
-    taskMovement,
+    onToolChangeCleanup,
   ]);
 
   // Export diagram as PNG
@@ -526,7 +529,7 @@ function ElkCanvasInner({
       console.error("Failed to export diagram:", err);
       setIsExporting(false);
     }
-  }, [layout, epic.title]);
+  }, [layout, epic.title, setIsExporting]);
 
   // Loading state
   if (isLoading) {
@@ -577,8 +580,6 @@ function ElkCanvasInner({
       <CanvasActionBar
         hasChanges={hasChanges}
         isSaving={isSaving}
-        isExporting={isExporting}
-        api={api}
         onSave={handleSave}
         onClearChanges={handleClearChanges}
         onExport={handleExport}
@@ -740,12 +741,7 @@ function ElkCanvasInner({
 /**
  * ElkCanvas Component
  *
- * Wrapper that provides the tool context to the inner component.
+ * Main visualization canvas for Epic diagrams.
+ * Must be wrapped with EpicProvider at the page level.
  */
-export function ElkCanvas(props: ElkCanvasProps) {
-  return (
-    <ToolProvider>
-      <ElkCanvasInner {...props} />
-    </ToolProvider>
-  );
-}
+export { ElkCanvasInner as ElkCanvas };

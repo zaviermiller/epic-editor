@@ -81,4 +81,4 @@ export interface ElkCanvasProps {
 /**
  * Tool types available in the canvas toolbar
  */
-export type { ToolType } from "../CanvasToolbar";
+export type { ToolType } from "./components/CanvasToolbar";

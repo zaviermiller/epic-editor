@@ -116,8 +116,8 @@
   --sidebar-ring: oklch(0.55 0.2 250);
 }
 
-/* Dark mode (default) */
-.dark {
+/* Dark mode (using data-color-mode attribute for Primer compatibility) */
+[data-color-mode="dark"] {
   --background: oklch(0.12 0.01 260);
   --foreground: oklch(0.95 0 0);
   --card: oklch(0.18 0.01 260);

@@ -8,3 +8,5 @@ export {
   useCanvasSettings,
 } from "./EpicContext";
 export type { ToolType, RepoInfo, CanvasSettings } from "./EpicContext";
+
+export { ThemeContextProvider, useThemeContext } from "./ThemeContext";

@@ -4,7 +4,9 @@ import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 
 import "@primer/primitives/dist/css/functional/themes/light.css";
-import { BaseStyles, ThemeProvider } from "@primer/react";
+import "@primer/primitives/dist/css/functional/themes/dark.css";
+import { ThemeContextProvider } from "@/contexts/ThemeContext";
+import { ThemeWrapper } from "@/components/ThemeWrapper";
 
 /**
  * Primary font configuration using Inter for clean, technical readability
@@ -22,7 +24,7 @@ export const metadata: Metadata = {
 };
 
 /**
- * Root layout component with dark mode as default theme
+ * Root layout component with theme support
  * Uses Inter font family for all text as per PRD specifications
  */
 export default function RootLayout({
@@ -31,12 +33,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" data-color-mode="light" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`}>
         <AuthProvider>
-          <ThemeProvider>
-            <BaseStyles>{children}</BaseStyles>
-          </ThemeProvider>
+          <ThemeContextProvider>
+            <ThemeWrapper>{children}</ThemeWrapper>
+          </ThemeContextProvider>
         </AuthProvider>
       </body>
     </html>

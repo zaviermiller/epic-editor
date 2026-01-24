@@ -26,6 +26,7 @@ import {
   XCircleIcon,
 } from "@primer/octicons-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Epic, Task, LoadingState, ApiError } from "@/types";
 import { GitHubApi, fetchEpicHierarchy } from "@/lib/github";
 import { getMockEpic } from "@/lib/mockData";
@@ -393,6 +394,9 @@ export default function VisPage({ params }: VisPageProps) {
                   )}
                 </>
               )}
+
+              {/* Theme toggle */}
+              <ThemeToggle />
 
               {/* Auth status */}
               {isAuthenticated && user ? (

@@ -9,14 +9,7 @@
 import { useSyncExternalStore, useCallback } from "react";
 import Link from "next/link";
 import { getFavorites, removeFavorite, FavoriteEpic } from "@/lib/favorites";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Button, Text, Heading } from "@primer/react";
 import {
   StarFillIcon,
   LinkExternalIcon,
@@ -52,8 +45,8 @@ function FavoriteCard({ favorite, onRemove }: FavoriteCardProps) {
   const visUrl = `/vis/${encodeURIComponent(favorite.owner)}/${encodeURIComponent(favorite.repo)}/${favorite.issueNumber}`;
 
   return (
-    <Card className="group hover:border-primary/50 transition-colors">
-      <CardContent className="p-4">
+    <div className="group border border-[var(--borderColor-default)] rounded-lg hover:border-[var(--borderColor-accent-emphasis)] transition-colors">
+      <div className="p-4">
         <div className="flex items-start gap-3">
           <div className="shrink-0 mt-1">
             <StarFillIcon size={16} className="text-yellow-500" />
@@ -61,14 +54,14 @@ function FavoriteCard({ favorite, onRemove }: FavoriteCardProps) {
           <div className="flex-1 min-w-0">
             <Link
               href={visUrl}
-              className="text-sm font-medium hover:text-primary hover:underline block truncate"
+              className="text-sm font-medium hover:text-[var(--fgColor-accent)] hover:underline block truncate"
             >
               {favorite.title}
             </Link>
-            <p className="text-xs text-muted-foreground mt-1">
+            <Text className="text-xs text-[var(--fgColor-muted)] mt-1 block">
               {favorite.owner}/{favorite.repo}#{favorite.issueNumber}
-            </p>
-            <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+            </Text>
+            <div className="flex items-center gap-3 mt-2 text-xs text-[var(--fgColor-muted)]">
               <span className="flex items-center gap-1">
                 <ClockIcon size={12} />
                 Updated {formatRelativeTime(favorite.lastRefreshedAt)}
@@ -77,27 +70,26 @@ function FavoriteCard({ favorite, onRemove }: FavoriteCardProps) {
           </div>
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0"
+              variant="invisible"
+              size="small"
               onClick={() => window.open(favorite.epic.url, "_blank")}
-              title="Open in GitHub"
+              aria-label="Open in GitHub"
             >
               <LinkExternalIcon size={14} />
             </Button>
             <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+              variant="invisible"
+              size="small"
+              className="text-red-500 hover:text-red-500"
               onClick={() => onRemove(favorite.key)}
-              title="Remove from favorites"
+              aria-label="Remove from favorites"
             >
               <TrashIcon size={14} />
             </Button>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -141,17 +133,17 @@ export function FavoritesList() {
   }
 
   return (
-    <Card className="mb-6">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+    <div className="border border-[var(--borderColor-default)] rounded-lg bg-[var(--bgColor-muted)] mb-6">
+      <div className="p-4 border-b border-[var(--borderColor-default)]">
+        <Heading as="h2" className="flex items-center gap-2 text-lg">
           <StarFillIcon size={20} className="text-yellow-500" />
           Favorite Epics
-        </CardTitle>
-        <CardDescription>
+        </Heading>
+        <Text className="text-sm text-[var(--fgColor-muted)]">
           Quick access to your saved epic visualizations
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+        </Text>
+      </div>
+      <div className="p-4">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {favorites.map((favorite) => (
             <FavoriteCard
@@ -161,7 +153,7 @@ export function FavoritesList() {
             />
           ))}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

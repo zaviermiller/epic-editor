@@ -9,9 +9,7 @@
 "use client";
 
 import { useState } from "react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button, Avatar, TextInput, Text, Heading } from "@primer/react";
 import {
   AlertIcon,
   LockIcon,
@@ -88,22 +86,19 @@ export function AuthStatus({
 
   if (isAuthenticated && user) {
     return (
-      <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
-        <Avatar className="h-8 w-8">
-          <AvatarImage src={user.avatar_url} alt={user.login} />
-          <AvatarFallback>{user.login.charAt(0).toUpperCase()}</AvatarFallback>
-        </Avatar>
+      <div className="flex items-center gap-3 rounded-lg border border-[var(--borderColor-default)] bg-[var(--bgColor-muted)] p-3">
+        <Avatar src={user.avatar_url} alt={user.login} size={32} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-medium truncate">{user.login}</span>
+            <Text className="font-medium truncate">{user.login}</Text>
             <LockIcon size={12} className="text-green-500" />
           </div>
-          <p className="text-xs text-muted-foreground">
+          <Text className="text-xs text-[var(--fgColor-muted)]">
             Private repos accessible
-          </p>
+          </Text>
         </div>
         {onSignOut && (
-          <Button variant="ghost" size="sm" onClick={onSignOut}>
+          <Button variant="invisible" size="small" onClick={onSignOut}>
             <SignOutIcon size={16} />
           </Button>
         )}
@@ -119,23 +114,23 @@ export function AuthStatus({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-medium">Not authenticated</span>
+            <Text className="font-medium">Not authenticated</Text>
             <UnlockIcon size={12} className="text-yellow-500" />
           </div>
-          <p className="text-xs text-muted-foreground">
+          <Text className="text-xs text-[var(--fgColor-muted)]">
             Only public repositories accessible
-          </p>
+          </Text>
         </div>
       </div>
 
       {showPATInput ? (
         <div className="mt-3 space-y-2">
           <div className="flex gap-2">
-            <Input
+            <TextInput
               type="password"
               placeholder="ghp_xxxxxxxxxxxx"
               value={patValue}
-              onChange={(e) => {
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                 setPATValue(e.target.value);
                 setPATError(null);
               }}
@@ -145,7 +140,7 @@ export function AuthStatus({
               autoFocus
             />
             <Button
-              size="sm"
+              size="small"
               onClick={handlePATSubmit}
               disabled={!patValue.trim() || isSubmitting}
             >
@@ -156,8 +151,8 @@ export function AuthStatus({
               )}
             </Button>
             <Button
-              size="sm"
-              variant="ghost"
+              size="small"
+              variant="invisible"
               onClick={() => {
                 setShowPATInput(false);
                 setPATValue("");
@@ -168,8 +163,8 @@ export function AuthStatus({
               <XIcon size={16} />
             </Button>
           </div>
-          {patError && <p className="text-xs text-red-500">{patError}</p>}
-          <p className="text-xs text-muted-foreground">
+          {patError && <Text className="text-xs text-red-500">{patError}</Text>}
+          <Text className="text-xs text-[var(--fgColor-muted)]">
             <a
               href="https://github.com/settings/tokens?type=beta"
               target="_blank"
@@ -179,31 +174,34 @@ export function AuthStatus({
               Create a token
               <LinkExternalIcon size={12} />
             </a>{" "}
-            with <code className="text-xs bg-muted px-1 rounded">repo</code>{" "}
+            with{" "}
+            <code className="text-xs bg-[var(--bgColor-muted)] px-1 rounded">
+              repo
+            </code>{" "}
             scope
-          </p>
+          </Text>
         </div>
       ) : (
         <div className="mt-3 flex gap-2">
           {onSignIn && (
             <Button
-              variant="outline"
-              size="sm"
+              variant="default"
+              size="small"
               onClick={onSignIn}
               className="flex-1"
+              leadingVisual={MarkGithubIcon}
             >
-              <MarkGithubIcon size={16} className="mr-2" />
               Sign in with GitHub
             </Button>
           )}
           {onSignInWithPAT && (
             <Button
-              variant="outline"
-              size="sm"
+              variant="default"
+              size="small"
               onClick={() => setShowPATInput(true)}
               className="flex-1"
+              leadingVisual={KeyIcon}
             >
-              <KeyIcon size={16} className="mr-2" />
               Use Token (PAT)
             </Button>
           )}

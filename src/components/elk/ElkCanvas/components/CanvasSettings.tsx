@@ -59,7 +59,7 @@ export function CanvasSettings() {
 
           {/* Popover content */}
           <div
-            className="absolute bottom-full mb-2 right-0 z-50 min-w-70 bg-card border border-border rounded-lg shadow-lg overflow-hidden"
+            className="absolute top-full mt-2 right-0 z-50 min-w-70 bg-card border border-border rounded-lg shadow-lg overflow-hidden"
             role="menu"
           >
             <div className="px-3 py-2 border-b border-border bg-muted/30">

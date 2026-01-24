@@ -8,8 +8,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Button, TextInput, Text } from "@primer/react";
 import { isValidGitHubUrl, parseGitHubUrl } from "@/lib/github";
 import { LinkIcon, SyncIcon, AlertIcon } from "@primer/octicons-react";
 import { RepoInfo } from "@/types";
@@ -88,16 +87,19 @@ export function EpicInput({
     <form onSubmit={handleSubmit} className="w-full space-y-2">
       <div className="flex gap-2">
         <div className="relative flex-1">
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--fgColor-muted)]">
             <LinkIcon size={16} />
           </div>
-          <Input
+          <TextInput
             type="text"
             placeholder="Enter GitHub Epic issue URL (e.g., https://github.com/owner/repo/issues/123)"
             value={url}
             onChange={handleChange}
             disabled={isLoading}
-            className={`pl-10 ${error ? "border-destructive" : ""} ${showValidIndicator ? "border-green-500" : ""}`}
+            className={`pl-10 w-full ${error ? "border-red-500" : ""} ${showValidIndicator ? "border-green-500" : ""}`}
+            validationStatus={
+              error ? "error" : showValidIndicator ? "success" : undefined
+            }
           />
         </div>
         <Button
@@ -117,15 +119,15 @@ export function EpicInput({
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 text-sm text-destructive">
+        <div className="flex items-center gap-2 text-sm text-red-500">
           <AlertIcon size={16} />
           {error}
         </div>
       )}
 
-      <p className="text-xs text-muted-foreground">
+      <Text className="text-xs text-[var(--fgColor-muted)]">
         Enter the URL of a GitHub Epic issue to visualize its batches and tasks
-      </p>
+      </Text>
     </form>
   );
 }

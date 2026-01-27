@@ -36,6 +36,11 @@ export const STATUS_COLORS = {
     text: "#ffffff",
     border: "#dc2626", // red-600
   },
+  unknown: {
+    bg: "#6b7280", // gray-500
+    text: "#ffffff",
+    border: "#4b5563", // gray-600
+  },
 } as const;
 
 /**
@@ -66,6 +71,8 @@ export function getStatusBgClass(status: IssueStatus): string {
       return "bg-blue-500";
     case "blocked":
       return "bg-red-500";
+    case "unknown":
+      return "bg-gray-500";
   }
 }
 
@@ -81,6 +88,8 @@ export function getStatusTextClass(status: IssueStatus): string {
     case "ready":
       return "text-white";
     case "blocked":
+      return "text-white";
+    case "unknown":
       return "text-white";
   }
 }
@@ -102,6 +111,8 @@ export function getStatusLabel(status: IssueStatus): string {
       return "Ready";
     case "blocked":
       return "Blocked";
+    case "unknown":
+      return "Unknown";
   }
 }
 
@@ -121,9 +132,15 @@ export interface StatusItem {
 
 /**
  * All status items in display order (for legends)
- * Order: blocked (worst) -> ready -> in-progress -> done (best)
+ * Order: unknown -> blocked (worst) -> ready -> in-progress -> done (best)
  */
 export const STATUS_ITEMS: StatusItem[] = [
+  {
+    status: "unknown",
+    label: "Unknown",
+    bgClass: "bg-gray-500",
+    hexColor: "#6b7280",
+  },
   {
     status: "blocked",
     label: "Blocked",

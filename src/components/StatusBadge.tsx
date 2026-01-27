@@ -8,6 +8,7 @@
  * - In Progress: Yellow
  * - Ready: Blue
  * - Blocked: Red
+ * - Unknown: Gray
  */
 
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +19,7 @@ import {
   IssueOpenedIcon,
   DotFillIcon,
   XCircleFillIcon,
+  QuestionIcon,
 } from "@primer/octicons-react";
 
 interface StatusBadgeProps {
@@ -38,6 +40,8 @@ function getStatusIcon(status: IssueStatus) {
       return <IssueOpenedIcon size={12} />;
     case "blocked":
       return <XCircleFillIcon size={12} />;
+    case "unknown":
+      return <QuestionIcon size={12} />;
   }
 }
 
@@ -54,6 +58,8 @@ function getStatusClass(status: IssueStatus): string {
       return "status-ready";
     case "blocked":
       return "status-blocked";
+    case "unknown":
+      return "status-unknown";
   }
 }
 

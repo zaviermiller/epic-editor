@@ -67,6 +67,7 @@
   --color-status-in-progress: var(--status-in-progress);
   --color-status-ready: var(--status-ready);
   --color-status-blocked: var(--status-blocked);
+  --color-status-unknown: var(--status-unknown);
 }
 
 /* Light mode (not default, but available) */
@@ -96,6 +97,7 @@
   --status-in-progress: oklch(0.85 0.18 85);
   --status-ready: oklch(0.7 0.15 230);
   --status-blocked: oklch(0.65 0.22 25);
+  --status-unknown: oklch(0.55 0 0);
   
   /* Chart colors */
   --chart-1: oklch(0.55 0.2 250);
@@ -141,6 +143,7 @@
   --status-in-progress: oklch(0.75 0.18 85);
   --status-ready: oklch(0.65 0.15 230);
   --status-blocked: oklch(0.6 0.22 25);
+  --status-unknown: oklch(0.5 0 0);
   
   /* Chart colors */
   --chart-1: oklch(0.6 0.2 250);
@@ -185,6 +188,10 @@
   }
   .status-blocked {
     background-color: var(--status-blocked);
+    color: oklch(1 0 0);
+  }
+  .status-unknown {
+    background-color: var(--status-unknown);
     color: oklch(1 0 0);
   }
 }

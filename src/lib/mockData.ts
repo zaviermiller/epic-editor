@@ -274,10 +274,18 @@ for (const batch of mockEpic.batches) {
 mockEpic.dependencies = allDependencies;
 
 // Resolve blocked statuses based on dependency chain
-const resolvedMockEpic = resolveBlockedStatuses(mockEpic);
+// For mock data, we don't need to fetch external dependencies, so we don't pass the API
+let resolvedMockEpic: Epic = mockEpic;
+
+// Initialize the resolved mock epic asynchronously
+(async () => {
+  resolvedMockEpic = await resolveBlockedStatuses(mockEpic);
+})();
 
 /**
  * Get the mock epic for testing
+ * Note: This returns the initially resolved epic. For full async resolution,
+ * call resolveBlockedStatuses directly with an API instance.
  */
 export function getMockEpic(): Epic {
   return resolvedMockEpic;

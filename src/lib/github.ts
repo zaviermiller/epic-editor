@@ -709,17 +709,31 @@ export function buildEpic(
 }
 
 /**
- * Resolve "ready" statuses to either "ready" or "blocked" based on dependency chain.
+ * Resolve "ready" statuses to either "ready", "blocked", or "unknown" based on dependency chain.
  *
  * An issue is "blocked" if any of its dependencies (direct or transitive) is not "done".
  * An issue is "ready" if it has no dependencies OR all dependencies are "done".
+ * An issue is "unknown" if any dependency's status could not be determined.
  *
  * This function handles:
  * - Transitive dependencies (A depends on B depends on C - if C is not done, A is blocked)
  * - Circular dependencies (if detected, issues in the cycle are marked as blocked)
  * - Cross-batch dependencies (task in batch A depends on task in batch B)
+ * - External dependencies (issues not in the epic hierarchy - fetched via API)
+ * - Cross-repo dependencies (issues in different repositories)
+ *
+ * @param epic - The epic to resolve statuses for
+ * @param api - Optional API instance for fetching external dependencies. If not provided,
+ *              external dependencies are assumed to be "done" (legacy behavior).
+ * @param epicOwner - Owner of the epic's repository (for same-repo dependency lookups)
+ * @param epicRepo - Name of the epic's repository (for same-repo dependency lookups)
  */
-export function resolveBlockedStatuses(epic: Epic): Epic {
+export async function resolveBlockedStatuses(
+  epic: Epic,
+  api?: GitHubApi,
+  epicOwner?: string,
+  epicRepo?: string,
+): Promise<Epic> {
   // Build a map of issue number → issue data for quick lookups
   const issueMap = new Map<
     number,
@@ -746,6 +760,45 @@ export function resolveBlockedStatuses(epic: Epic): Epic {
     }
   }
 
+  // Collect all dependency targets to identify external dependencies
+  const allDependencyTargets = new Set<number>();
+  for (const batch of epic.batches) {
+    batch.dependsOn.forEach((d) => allDependencyTargets.add(d));
+    for (const task of batch.tasks) {
+      task.dependsOn.forEach((d) => allDependencyTargets.add(d));
+    }
+  }
+
+  // Identify external dependencies (not in the loaded hierarchy)
+  const externalDeps = [...allDependencyTargets].filter(
+    (n) => !issueMap.has(n),
+  );
+
+  // Fetch status of external dependencies if API is available
+  const externalStatuses = new Map<number, IssueStatus>();
+  if (api && epicOwner && epicRepo && externalDeps.length > 0) {
+    // Fetch external dependencies in parallel (batch of 5 to avoid rate limiting)
+    const batchSize = 5;
+    for (let i = 0; i < externalDeps.length; i += batchSize) {
+      const batch = externalDeps.slice(i, i + batchSize);
+      const results = await Promise.all(
+        batch.map(async (depNum) => {
+          try {
+            // Try to fetch from the same repo first
+            const issue = await api.getIssue(epicOwner, epicRepo, depNum);
+            return { depNum, status: determineIssueStatus(issue) };
+          } catch {
+            // If not found, mark as unknown
+            return { depNum, status: "unknown" as IssueStatus };
+          }
+        }),
+      );
+      for (const { depNum, status } of results) {
+        externalStatuses.set(depNum, status);
+      }
+    }
+  }
+
   // Cache for resolved statuses to avoid recomputation
   const resolvedStatus = new Map<number, IssueStatus>();
 
@@ -764,8 +817,13 @@ export function resolveBlockedStatuses(epic: Epic): Epic {
 
     const issue = issueMap.get(issueNumber);
 
-    // If issue not found in our map, assume it's done (external dependency)
+    // If issue not found in our map, check external statuses
     if (!issue) {
+      if (externalStatuses.has(issueNumber)) {
+        return externalStatuses.get(issueNumber)!;
+      }
+      // No API provided or fetch failed - assume "done" for backward compatibility
+      // This happens when resolveBlockedStatuses is called without API (e.g., mock data)
       return "done";
     }
 
@@ -791,20 +849,41 @@ export function resolveBlockedStatuses(epic: Epic): Epic {
 
     // Check all dependencies
     let isBlocked = false;
+    let hasUnknown = false;
     for (const depNumber of issue.dependsOn) {
       const depStatus = resolveStatus(depNumber, visiting);
+
+      // Track unknown status
+      if (depStatus === "unknown") {
+        hasUnknown = true;
+      }
 
       // If any dependency is not done, this issue is blocked
       if (depStatus !== "done") {
         isBlocked = true;
-        break;
+        // Don't break early - continue to check for unknown status
       }
     }
 
     // Remove from visiting set
     visiting.delete(issueNumber);
 
-    const finalStatus = isBlocked ? "blocked" : "ready";
+    // Determine final status:
+    // - If any dependency is unknown and would block, mark as unknown
+    // - Otherwise, blocked or ready based on dependency states
+    let finalStatus: IssueStatus;
+    if (hasUnknown && isBlocked) {
+      // We're blocked but at least one blocker is unknown
+      // Check if we're blocked by known issues or only unknown ones
+      const hasKnownBlocker = issue.dependsOn.some((depNum) => {
+        const depStatus = resolvedStatus.get(depNum) ?? externalStatuses.get(depNum);
+        return depStatus && depStatus !== "done" && depStatus !== "unknown";
+      });
+      finalStatus = hasKnownBlocker ? "blocked" : "unknown";
+    } else {
+      finalStatus = isBlocked ? "blocked" : "ready";
+    }
+    
     resolvedStatus.set(issueNumber, finalStatus);
     return finalStatus;
   }
@@ -828,6 +907,8 @@ export function resolveBlockedStatuses(epic: Epic): Epic {
       // Synthetic batch: derive status from tasks
       if (updatedTasks.every((t) => t.status === "done")) {
         batchStatus = "done";
+      } else if (updatedTasks.some((t) => t.status === "unknown")) {
+        batchStatus = "unknown";
       } else if (updatedTasks.some((t) => t.status === "blocked")) {
         batchStatus = "blocked";
       } else if (
@@ -995,8 +1076,9 @@ export async function fetchEpicHierarchy(
 
   const epic = buildEpic(epicIssue, owner, repo, batches, allDependencies);
 
-  // Resolve "ready" statuses to "ready" or "blocked" based on dependency chain
-  return resolveBlockedStatuses(epic);
+  // Resolve "ready" statuses to "ready", "blocked", or "unknown" based on dependency chain
+  // Pass the API so we can fetch external dependency statuses
+  return resolveBlockedStatuses(epic, api, owner, repo);
 }
 
 /**

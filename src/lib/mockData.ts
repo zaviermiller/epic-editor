@@ -5,15 +5,17 @@
  * for testing the visualizer without requiring GitHub API access.
  */
 
-import { Epic, Batch, Task, Dependency } from "@/types";
+import { Epic, Batch, Task, Dependency, IssueStatus } from "@/types";
+import { resolveBlockedStatuses } from "./github";
 
 /**
  * Create a mock task
+ * Note: "ready" status will be resolved to "ready" or "blocked" by resolveBlockedStatuses()
  */
 function createMockTask(
   number: number,
   title: string,
-  status: "done" | "in-progress" | "planned" | "not-planned",
+  status: IssueStatus,
   dependsOn: number[] = [],
 ): Task {
   return {
@@ -55,8 +57,9 @@ function createMockBatch(
     number,
     title,
     body: `This is the body of batch #${number}`,
+    // Initial status - will be resolved by resolveBlockedStatuses()
     status:
-      progress === 100 ? "done" : progress > 0 ? "in-progress" : "planned",
+      progress === 100 ? "done" : progress > 0 ? "in-progress" : "ready",
     url: `https://github.com/example/repo/issues/${number}`,
     labels: [{ id: number, name: "batch", color: "purple", description: "" }],
     assignees: [
@@ -111,9 +114,9 @@ export const mockEpic: Epic = {
         createMockTask(9103, "getUsageSubscr iptio...", "done"),
         createMockTask(9104, "github_owner_id →meterit...", "done"),
         createMockTask(9105, "github_subscriptio n_s...", "in-progress"),
-        createMockTask(9106, "Remove InvoiceInvoicec...", "planned", [9105]),
+        createMockTask(9106, "Remove InvoiceInvoicec...", "ready", [9105]),
         createMockTask(9107, "Remove metered...", "in-progress"),
-        createMockTask(9108, "github_owner_id Migrate", "planned", [9107]),
+        createMockTask(9108, "github_owner_id Migrate", "ready", [9107]),
         createMockTask(9109, "Extract sub-issue", "done"),
       ],
       [],
@@ -128,9 +131,9 @@ export const mockEpic: Epic = {
         createMockTask(9202, "create_zuora _s...", "in-progress", [9201]),
         createMockTask(9203, "Zuora finance", "done"),
         createMockTask(9204, "Add subscription ID...", "in-progress", [9203]),
-        createMockTask(9205, "Create link Cust...", "planned"),
-        createMockTask(9206, "Copy old data", "planned", [9205]),
-        createMockTask(9207, "Stop old data", "planned", [9206]),
+        createMockTask(9205, "Create link Cust...", "ready"),
+        createMockTask(9206, "Copy old data", "ready", [9205]),
+        createMockTask(9207, "Stop old data", "ready", [9206]),
       ],
       [9090],
     ),
@@ -151,13 +154,13 @@ export const mockEpic: Epic = {
       9400,
       "Embellishments and fixes",
       [
-        createMockTask(9401, "Remove print...", "planned"),
+        createMockTask(9401, "Remove print...", "ready"),
         createMockTask(9402, "table of retired sku...", "in-progress"),
-        createMockTask(9403, "Delete billing entit...", "planned", [9402]),
+        createMockTask(9403, "Delete billing entit...", "ready", [9402]),
         createMockTask(9404, "Stores Core sku's...", "done"),
-        createMockTask(9405, "To missing environment...", "not-planned"),
+        createMockTask(9405, "To missing environment...", "done"),
         createMockTask(9406, "Impacted attributes #9...", "in-progress"),
-        createMockTask(9407, "Difference environmen...", "planned", [9406]),
+        createMockTask(9407, "Difference environmen...", "ready", [9406]),
       ],
       [9321],
     ),
@@ -179,13 +182,13 @@ export const mockEpic: Epic = {
           [9501],
         ),
         createMockTask(9503, "Update meter_uuid to sk...", "in-progress"),
-        createMockTask(9504, "Add metered_emit_m...", "planned", [9503]),
+        createMockTask(9504, "Add metered_emit_m...", "ready", [9503]),
         createMockTask(9505, "consume metered_emi...", "done"),
-        createMockTask(9506, "Remove meter_uuid in...", "planned", [9505]),
-        createMockTask(9507, "emit_emi metered_emi...", "planned"),
+        createMockTask(9506, "Remove meter_uuid in...", "ready", [9505]),
+        createMockTask(9507, "emit_emi metered_emi...", "ready"),
         createMockTask(9508, "Allow_1 metered emi...", "done"),
         createMockTask(9509, "Remove metered...", "done"),
-        createMockTask(9510, "meter_uuid deprecated from APIs", "not-planned"),
+        createMockTask(9510, "meter_uuid deprecated from APIs", "done"),
       ],
       [],
     ),
@@ -203,7 +206,7 @@ export const mockEpic: Epic = {
           "in-progress",
           [9602],
         ),
-        createMockTask(9604, "Revise private_butto at...", "planned"),
+        createMockTask(9604, "Revise private_butto at...", "ready"),
       ],
       [9324],
     ),
@@ -223,16 +226,16 @@ export const mockEpic: Epic = {
         createMockTask(
           9703,
           "Add MeuseProductSyncMiddle...",
-          "planned",
+          "ready",
           [9702],
         ),
-        createMockTask(9704, "Add EventPublisher...", "planned"),
-        createMockTask(9705, "Meuse get to data...", "planned", [9703, 9704]),
+        createMockTask(9704, "Add EventPublisher...", "ready"),
+        createMockTask(9705, "Meuse get to data...", "ready", [9703, 9704]),
         createMockTask(9706, "Add DotcomEvent ps...", "done"),
         createMockTask(
           9707,
           "Issue a cleanup old create by...",
-          "planned",
+          "ready",
           [9706],
         ),
       ],
@@ -270,9 +273,12 @@ for (const batch of mockEpic.batches) {
 
 mockEpic.dependencies = allDependencies;
 
+// Resolve blocked statuses based on dependency chain
+const resolvedMockEpic = resolveBlockedStatuses(mockEpic);
+
 /**
  * Get the mock epic for testing
  */
 export function getMockEpic(): Epic {
-  return mockEpic;
+  return resolvedMockEpic;
 }

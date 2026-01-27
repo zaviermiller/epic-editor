@@ -69,6 +69,42 @@ export function CanvasSettings() {
             </div>
 
             <div className="p-3 space-y-3">
+              {/* Task dependencies toggle */}
+              <label className="flex items-center justify-between gap-3 cursor-pointer group">
+                <div className="flex-1">
+                  <div className="text-sm font-medium text-foreground">
+                    Show task dependencies
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Display arrows showing which tasks depend on other tasks
+                  </div>
+                </div>
+                <button
+                  role="switch"
+                  aria-checked={settings.showTaskDependencies}
+                  onClick={() =>
+                    updateSetting(
+                      "showTaskDependencies",
+                      !settings.showTaskDependencies,
+                    )
+                  }
+                  className={`
+                    relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent 
+                    transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 
+                    focus-visible:ring-primary focus-visible:ring-offset-2
+                    ${settings.showTaskDependencies ? "bg-primary" : "bg-muted-foreground/30"}
+                  `}
+                >
+                  <span
+                    className={`
+                      pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg 
+                      ring-0 transition duration-200 ease-in-out
+                      ${settings.showTaskDependencies ? "translate-x-4" : "translate-x-0"}
+                    `}
+                  />
+                </button>
+              </label>
+
               {/* Inter-batch edges toggle */}
               <label className="flex items-center justify-between gap-3 cursor-pointer group">
                 <div className="flex-1">

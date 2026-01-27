@@ -179,7 +179,12 @@ function ElkCanvasInner({
       if (removedEdges.has(edge.id)) {
         return false;
       }
-      // Filter out inter-batch task edges if setting is disabled
+      // Filter out all task edges if showTaskDependencies is disabled
+      if (!settings.showTaskDependencies && !edge.isBatchEdge) {
+        return false;
+      }
+      // Filter out inter-batch task edges if showInterBatchEdges is disabled
+      // (only applies when showTaskDependencies is enabled)
       if (
         !settings.showInterBatchEdges &&
         edge.isInterBatch &&
@@ -189,7 +194,13 @@ function ElkCanvasInner({
       }
       return true;
     });
-  }, [layout, removedEdges, removedBatchEdges, settings.showInterBatchEdges]);
+  }, [
+    layout,
+    removedEdges,
+    removedBatchEdges,
+    settings.showTaskDependencies,
+    settings.showInterBatchEdges,
+  ]);
 
   // Highlighting
   const {

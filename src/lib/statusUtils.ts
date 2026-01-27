@@ -26,15 +26,15 @@ export const STATUS_COLORS = {
     text: "#1f2937", // gray-800
     border: "#eab308", // yellow-500
   },
-  planned: {
+  ready: {
     bg: "#3b82f6", // blue-500
     text: "#ffffff",
     border: "#2563eb", // blue-600
   },
-  "not-planned": {
-    bg: "#9ca3af", // gray-400
+  blocked: {
+    bg: "#ef4444", // red-500
     text: "#ffffff",
-    border: "#6b7280", // gray-500
+    border: "#dc2626", // red-600
   },
 } as const;
 
@@ -62,10 +62,10 @@ export function getStatusBgClass(status: IssueStatus): string {
       return "bg-green-500";
     case "in-progress":
       return "bg-yellow-400";
-    case "planned":
+    case "ready":
       return "bg-blue-500";
-    case "not-planned":
-      return "bg-gray-400";
+    case "blocked":
+      return "bg-red-500";
   }
 }
 
@@ -78,9 +78,9 @@ export function getStatusTextClass(status: IssueStatus): string {
       return "text-white";
     case "in-progress":
       return "text-gray-900";
-    case "planned":
+    case "ready":
       return "text-white";
-    case "not-planned":
+    case "blocked":
       return "text-white";
   }
 }
@@ -98,10 +98,10 @@ export function getStatusLabel(status: IssueStatus): string {
       return "Done";
     case "in-progress":
       return "In Progress";
-    case "planned":
-      return "Planned";
-    case "not-planned":
-      return "Not Planned";
+    case "ready":
+      return "Ready";
+    case "blocked":
+      return "Blocked";
   }
 }
 
@@ -121,17 +121,18 @@ export interface StatusItem {
 
 /**
  * All status items in display order (for legends)
+ * Order: blocked (worst) -> ready -> in-progress -> done (best)
  */
 export const STATUS_ITEMS: StatusItem[] = [
   {
-    status: "not-planned",
-    label: "Not Planned",
-    bgClass: "bg-gray-400",
-    hexColor: "#9ca3af",
+    status: "blocked",
+    label: "Blocked",
+    bgClass: "bg-red-500",
+    hexColor: "#ef4444",
   },
   {
-    status: "planned",
-    label: "Planned",
+    status: "ready",
+    label: "Ready",
     bgClass: "bg-blue-500",
     hexColor: "#3b82f6",
   },

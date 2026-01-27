@@ -3,11 +3,11 @@
  *
  * Displays the status of an issue with appropriate color coding.
  *
- * Color scheme (from PRD):
+ * Color scheme:
  * - Done/Completed: Green
  * - In Progress: Yellow
- * - Planned: Blue
- * - Not Planned: Gray
+ * - Ready: Blue
+ * - Blocked: Red
  */
 
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +17,7 @@ import {
   CheckCircleFillIcon,
   IssueOpenedIcon,
   DotFillIcon,
-  SkipIcon,
+  XCircleFillIcon,
 } from "@primer/octicons-react";
 
 interface StatusBadgeProps {
@@ -34,10 +34,10 @@ function getStatusIcon(status: IssueStatus) {
       return <CheckCircleFillIcon size={12} />;
     case "in-progress":
       return <DotFillIcon size={12} />;
-    case "planned":
+    case "ready":
       return <IssueOpenedIcon size={12} />;
-    case "not-planned":
-      return <SkipIcon size={12} />;
+    case "blocked":
+      return <XCircleFillIcon size={12} />;
   }
 }
 
@@ -50,10 +50,10 @@ function getStatusClass(status: IssueStatus): string {
       return "status-done";
     case "in-progress":
       return "status-in-progress";
-    case "planned":
-      return "status-planned";
-    case "not-planned":
-      return "status-not-planned";
+    case "ready":
+      return "status-ready";
+    case "blocked":
+      return "status-blocked";
   }
 }
 

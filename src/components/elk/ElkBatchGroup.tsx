@@ -57,10 +57,10 @@ function getHeaderBgColor(status: IssueStatus): string {
       return "#22c55e20"; // green-500/12
     case "in-progress":
       return "#facc1520"; // yellow-400/12
-    case "planned":
+    case "ready":
       return "#3b82f620"; // blue-500/12
-    case "not-planned":
-      return "#9ca3af20"; // gray-400/12
+    case "blocked":
+      return "#ef444420"; // red-500/12
   }
 }
 

@@ -595,13 +595,14 @@ export class GitHubApi {
 }
 
 /**
- * Determine issue status from GitHub issue data
+ * Determine base issue status from GitHub issue data.
+ * This returns a preliminary status that doesn't account for dependencies.
+ * For open issues without in-progress labels, returns "ready" as a placeholder
+ * that will be resolved to "ready" or "blocked" by resolveBlockedStatuses().
  */
 export function determineIssueStatus(issue: GitHubIssue): IssueStatus {
   if (issue.state === "closed") {
-    if (issue.state_reason === "not_planned") {
-      return "not-planned";
-    }
+    // All closed issues are "done" regardless of close reason
     return "done";
   }
 
@@ -621,7 +622,9 @@ export function determineIssueStatus(issue: GitHubIssue): IssueStatus {
     return "in-progress";
   }
 
-  return "planned";
+  // Default to "ready" - will be resolved to "ready" or "blocked"
+  // by resolveBlockedStatuses() based on dependency chain
+  return "ready";
 }
 
 /**
@@ -702,6 +705,155 @@ export function buildEpic(
     batches,
     progress,
     dependencies: allDependencies,
+  };
+}
+
+/**
+ * Resolve "ready" statuses to either "ready" or "blocked" based on dependency chain.
+ *
+ * An issue is "blocked" if any of its dependencies (direct or transitive) is not "done".
+ * An issue is "ready" if it has no dependencies OR all dependencies are "done".
+ *
+ * This function handles:
+ * - Transitive dependencies (A depends on B depends on C - if C is not done, A is blocked)
+ * - Circular dependencies (if detected, issues in the cycle are marked as blocked)
+ * - Cross-batch dependencies (task in batch A depends on task in batch B)
+ */
+export function resolveBlockedStatuses(epic: Epic): Epic {
+  // Build a map of issue number → issue data for quick lookups
+  const issueMap = new Map<
+    number,
+    { status: IssueStatus; dependsOn: number[]; isTask: boolean }
+  >();
+
+  // Populate the map with all batches and tasks
+  for (const batch of epic.batches) {
+    // Skip synthetic batches (number === -1) as they don't have real dependencies
+    if (batch.number !== -1) {
+      issueMap.set(batch.number, {
+        status: batch.status,
+        dependsOn: batch.dependsOn,
+        isTask: false,
+      });
+    }
+
+    for (const task of batch.tasks) {
+      issueMap.set(task.number, {
+        status: task.status,
+        dependsOn: task.dependsOn,
+        isTask: true,
+      });
+    }
+  }
+
+  // Cache for resolved statuses to avoid recomputation
+  const resolvedStatus = new Map<number, IssueStatus>();
+
+  /**
+   * Recursively resolve the status of an issue based on its dependency chain.
+   * Uses memoization and cycle detection.
+   */
+  function resolveStatus(
+    issueNumber: number,
+    visiting: Set<number>,
+  ): IssueStatus {
+    // Check cache first
+    if (resolvedStatus.has(issueNumber)) {
+      return resolvedStatus.get(issueNumber)!;
+    }
+
+    const issue = issueMap.get(issueNumber);
+
+    // If issue not found in our map, assume it's done (external dependency)
+    if (!issue) {
+      return "done";
+    }
+
+    // If already done or in-progress, no need to resolve further
+    if (issue.status === "done" || issue.status === "in-progress") {
+      resolvedStatus.set(issueNumber, issue.status);
+      return issue.status;
+    }
+
+    // Cycle detection: if we're already visiting this issue, it's blocked
+    if (visiting.has(issueNumber)) {
+      return "blocked";
+    }
+
+    // No dependencies means ready
+    if (issue.dependsOn.length === 0) {
+      resolvedStatus.set(issueNumber, "ready");
+      return "ready";
+    }
+
+    // Add to visiting set for cycle detection
+    visiting.add(issueNumber);
+
+    // Check all dependencies
+    let isBlocked = false;
+    for (const depNumber of issue.dependsOn) {
+      const depStatus = resolveStatus(depNumber, visiting);
+
+      // If any dependency is not done, this issue is blocked
+      if (depStatus !== "done") {
+        isBlocked = true;
+        break;
+      }
+    }
+
+    // Remove from visiting set
+    visiting.delete(issueNumber);
+
+    const finalStatus = isBlocked ? "blocked" : "ready";
+    resolvedStatus.set(issueNumber, finalStatus);
+    return finalStatus;
+  }
+
+  // Resolve all issues
+  for (const issueNumber of issueMap.keys()) {
+    resolveStatus(issueNumber, new Set());
+  }
+
+  // Apply resolved statuses back to the epic
+  const updatedBatches = epic.batches.map((batch) => {
+    // Update tasks first
+    const updatedTasks = batch.tasks.map((task) => ({
+      ...task,
+      status: resolvedStatus.get(task.number) ?? task.status,
+    }));
+
+    // Determine batch status
+    let batchStatus: IssueStatus;
+    if (batch.number === -1) {
+      // Synthetic batch: derive status from tasks
+      if (updatedTasks.every((t) => t.status === "done")) {
+        batchStatus = "done";
+      } else if (updatedTasks.some((t) => t.status === "blocked")) {
+        batchStatus = "blocked";
+      } else if (
+        updatedTasks.some(
+          (t) => t.status === "in-progress" || t.status === "done",
+        )
+      ) {
+        batchStatus = "in-progress";
+      } else {
+        batchStatus = "ready";
+      }
+    } else {
+      // Real batch: use resolved status
+      batchStatus = resolvedStatus.get(batch.number) ?? batch.status;
+    }
+
+    return {
+      ...batch,
+      tasks: updatedTasks,
+      status: batchStatus,
+    };
+  });
+
+  return {
+    ...epic,
+    batches: updatedBatches,
   };
 }
 
@@ -817,13 +969,15 @@ export async function fetchEpicHierarchy(
       number: -1, // Synthetic number
       title: "Tasks",
       body: null,
+      // Synthetic batch status is derived from its tasks
+      // Will be updated by resolveBlockedStatuses()
       status: standaloneTasks.every((t) => t.status === "done")
         ? "done"
         : standaloneTasks.some(
               (t) => t.status === "in-progress" || t.status === "done",
             )
           ? "in-progress"
-          : "planned",
+          : "ready",
       url: epicIssue.html_url,
       labels: [],
       assignees: [],
@@ -839,7 +993,10 @@ export async function fetchEpicHierarchy(
     batches.unshift(syntheticBatch);
   }
 
-  return buildEpic(epicIssue, owner, repo, batches, allDependencies);
+  const epic = buildEpic(epicIssue, owner, repo, batches, allDependencies);
+
+  // Resolve "ready" statuses to "ready" or "blocked" based on dependency chain
+  return resolveBlockedStatuses(epic);
 }
 
 /**

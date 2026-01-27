@@ -23,6 +23,7 @@ import {
   IssueStatus,
   Dependency,
   ApiError,
+  ExternalDependencyRef,
 } from "@/types";
 
 /**
@@ -79,6 +80,25 @@ export function parseGitHubUrl(url: string): RepoInfo | null {
  */
 export function isValidGitHubUrl(url: string): boolean {
   return parseGitHubUrl(url) !== null;
+}
+
+/**
+ * Parse a GitHub API repository_url to extract owner and repo.
+ * The repository_url format is: https://api.github.com/repos/{owner}/{repo}
+ *
+ * @param repositoryUrl - The repository_url from a GitHub API response
+ * @returns An object with owner and repo, or null if parsing fails
+ */
+export function parseRepositoryUrl(
+  repositoryUrl: string | undefined,
+): { owner: string; repo: string } | null {
+  if (!repositoryUrl) return null;
+
+  const match = repositoryUrl.match(/\/repos\/([^\/]+)\/([^\/]+)$/);
+  if (match) {
+    return { owner: match[1], repo: match[2] };
+  }
+  return null;
 }
 
 /**
@@ -727,12 +747,15 @@ export function buildEpic(
  *              external dependencies are assumed to be "done" (legacy behavior).
  * @param epicOwner - Owner of the epic's repository (for same-repo dependency lookups)
  * @param epicRepo - Name of the epic's repository (for same-repo dependency lookups)
+ * @param crossRepoDepRefs - Map of issue number → cross-repo reference for dependencies
+ *                           that are in a different repository than the epic
  */
 export async function resolveBlockedStatuses(
   epic: Epic,
   api?: GitHubApi,
   epicOwner?: string,
   epicRepo?: string,
+  crossRepoDepRefs?: Map<number, ExternalDependencyRef>,
 ): Promise<Epic> {
   // Build a map of issue number → issue data for quick lookups
   const issueMap = new Map<
@@ -784,8 +807,12 @@ export async function resolveBlockedStatuses(
       const results = await Promise.all(
         batch.map(async (depNum) => {
           try {
-            // Try to fetch from the same repo first
-            const issue = await api.getIssue(epicOwner, epicRepo, depNum);
+            // Check if this is a cross-repo dependency
+            const crossRepoRef = crossRepoDepRefs?.get(depNum);
+            const depOwner = crossRepoRef?.owner ?? epicOwner;
+            const depRepo = crossRepoRef?.repo ?? epicRepo;
+
+            const issue = await api.getIssue(depOwner, depRepo, depNum);
             return { depNum, status: determineIssueStatus(issue) };
           } catch {
             // If not found, mark as unknown
@@ -972,6 +999,37 @@ export async function fetchEpicHierarchy(
   const batches: Batch[] = [];
   const allDependencies: Dependency[] = [];
 
+  // Track cross-repo dependency info for external dependency fetching
+  // Map from issue number → { owner, repo, number }
+  const crossRepoDepRefs = new Map<number, ExternalDependencyRef>();
+
+  /**
+   * Helper to collect dependency info, including cross-repo references
+   */
+  function collectDependencies(
+    fromIssue: number,
+    blockedByIssues: GitHubIssue[],
+  ) {
+    for (const dep of blockedByIssues) {
+      allDependencies.push({
+        from: fromIssue,
+        to: dep.number,
+        type: "depends-on",
+      });
+
+      // Check if this is a cross-repo dependency
+      const repoInfo = parseRepositoryUrl(dep.repository_url);
+      if (repoInfo && (repoInfo.owner !== owner || repoInfo.repo !== repo)) {
+        // This dependency is from a different repo
+        crossRepoDepRefs.set(dep.number, {
+          number: dep.number,
+          owner: repoInfo.owner,
+          repo: repoInfo.repo,
+        });
+      }
+    }
+  }
+
   // Collect standalone tasks (sub-issues with no children)
   const standaloneTasks: Task[] = [];
 
@@ -981,13 +1039,7 @@ export async function fetchEpicHierarchy(
     repo,
     issueNumber,
   );
-  for (const dep of epicBlockedBy) {
-    allDependencies.push({
-      from: issueNumber,
-      to: dep.number,
-      type: "depends-on",
-    });
-  }
+  collectDependencies(issueNumber, epicBlockedBy);
 
   // Process each direct sub-issue to determine if it's a batch or task
   for (const subIssue of directSubIssues) {
@@ -1000,13 +1052,7 @@ export async function fetchEpicHierarchy(
       repo,
       subIssue.number,
     );
-    for (const dep of subIssueBlockedBy) {
-      allDependencies.push({
-        from: subIssue.number,
-        to: dep.number,
-        type: "depends-on",
-      });
-    }
+    collectDependencies(subIssue.number, subIssueBlockedBy);
 
     if (childIssues.length > 0) {
       // This sub-issue has children → treat as a Batch
@@ -1020,14 +1066,7 @@ export async function fetchEpicHierarchy(
           repo,
           childIssue.number,
         );
-
-        for (const dep of taskBlockedBy) {
-          allDependencies.push({
-            from: childIssue.number,
-            to: dep.number,
-            type: "depends-on",
-          });
-        }
+        collectDependencies(childIssue.number, taskBlockedBy);
 
         const task = issueToTask(childIssue, taskBlockedBy);
         tasks.push(task);
@@ -1077,8 +1116,8 @@ export async function fetchEpicHierarchy(
   const epic = buildEpic(epicIssue, owner, repo, batches, allDependencies);
 
   // Resolve "ready" statuses to "ready", "blocked", or "unknown" based on dependency chain
-  // Pass the API so we can fetch external dependency statuses
-  return resolveBlockedStatuses(epic, api, owner, repo);
+  // Pass the API and cross-repo refs so we can fetch external dependency statuses correctly
+  return resolveBlockedStatuses(epic, api, owner, repo, crossRepoDepRefs);
 }
 
 /**

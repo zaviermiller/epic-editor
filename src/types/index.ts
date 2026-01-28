@@ -37,6 +37,8 @@ export interface GitHubIssue {
   state: "open" | "closed";
   /** HTML URL for the issue */
   html_url: string;
+  /** Repository API URL (indicates which repo this issue belongs to) */
+  repository_url?: string;
   /** Labels attached to the issue */
   labels: GitHubLabel[];
   /** User who created the issue */
@@ -107,6 +109,19 @@ export interface Dependency {
   to: number;
   /** Type of dependency relationship */
   type: "depends-on" | "blocks" | "related";
+}
+
+/**
+ * Reference to an external dependency that may be in a different repository.
+ * Used to track cross-repo dependencies so we can fetch their status correctly.
+ */
+export interface ExternalDependencyRef {
+  /** Issue number */
+  number: number;
+  /** Repository owner (e.g., "github") */
+  owner: string;
+  /** Repository name (e.g., "copilot-controls") */
+  repo: string;
 }
 
 /**

@@ -86,17 +86,15 @@ export function EpicInput({
   return (
     <form onSubmit={handleSubmit} className="w-full space-y-2">
       <div className="flex gap-2">
-        <div className="relative flex-1">
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--fgColor-muted)]">
-            <LinkIcon size={16} />
-          </div>
+        <div className="flex-1">
           <TextInput
             type="text"
             placeholder="Enter GitHub Epic issue URL (e.g., https://github.com/owner/repo/issues/123)"
             value={url}
             onChange={handleChange}
             disabled={isLoading}
-            className={`pl-10 w-full ${error ? "border-red-500" : ""} ${showValidIndicator ? "border-green-500" : ""}`}
+            leadingVisual={LinkIcon}
+            className={`w-full ${error ? "border-red-500" : ""} ${showValidIndicator ? "border-green-500" : ""}`}
             validationStatus={
               error ? "error" : showValidIndicator ? "success" : undefined
             }

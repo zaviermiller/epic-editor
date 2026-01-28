@@ -11,9 +11,15 @@
  */
 
 /**
- * Status of an issue based on GitHub's issue state and tracking
+ * Status of an issue based on GitHub's issue state and dependency chain
+ *
+ * - done: Issue is closed
+ * - in-progress: Issue is open with an in-progress label
+ * - ready: Issue is open, not in-progress, and all dependencies are done
+ * - blocked: Issue is open, not in-progress, and has at least one dependency that is not done
+ * - unknown: Issue depends on an external issue whose status could not be determined
  */
-export type IssueStatus = "done" | "in-progress" | "planned" | "not-planned";
+export type IssueStatus = "done" | "in-progress" | "ready" | "blocked" | "unknown";
 
 /**
  * GitHub Issue type - represents a single issue from the API

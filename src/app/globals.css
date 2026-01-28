@@ -65,8 +65,9 @@
   /* Custom status colors for issue visualization */
   --color-status-done: var(--status-done);
   --color-status-in-progress: var(--status-in-progress);
-  --color-status-planned: var(--status-planned);
-  --color-status-not-planned: var(--status-not-planned);
+  --color-status-ready: var(--status-ready);
+  --color-status-blocked: var(--status-blocked);
+  --color-status-unknown: var(--status-unknown);
 }
 
 /* Light mode (not default, but available) */
@@ -94,9 +95,9 @@
   /* Status colors */
   --status-done: oklch(0.7 0.18 145);
   --status-in-progress: oklch(0.85 0.18 85);
-  --status-planned: oklch(0.75 0.18 85);
-  --status-planned: oklch(0.7 0.15 230);
-  --status-not-planned: oklch(0.7 0 0);
+  --status-ready: oklch(0.7 0.15 230);
+  --status-blocked: oklch(0.65 0.22 25);
+  --status-unknown: oklch(0.55 0 0);
   
   /* Chart colors */
   --chart-1: oklch(0.55 0.2 250);
@@ -140,8 +141,9 @@
   /* Status colors (slightly adjusted for dark mode visibility) */
   --status-done: oklch(0.65 0.18 145);
   --status-in-progress: oklch(0.75 0.18 85);
-  --status-planned: oklch(0.65 0.15 230);
-  --status-not-planned: oklch(0.55 0 0);
+  --status-ready: oklch(0.65 0.15 230);
+  --status-blocked: oklch(0.6 0.22 25);
+  --status-unknown: oklch(0.5 0 0);
   
   /* Chart colors */
   --chart-1: oklch(0.6 0.2 250);
@@ -180,12 +182,16 @@
     background-color: var(--status-in-progress);
     color: oklch(0.15 0 0);
   }
-  .status-planned {
-    background-color: var(--status-planned);
+  .status-ready {
+    background-color: var(--status-ready);
     color: oklch(0.15 0 0);
   }
-  .status-not-planned {
-    background-color: var(--status-not-planned);
-    color: oklch(0.15 0 0);
+  .status-blocked {
+    background-color: var(--status-blocked);
+    color: oklch(1 0 0);
+  }
+  .status-unknown {
+    background-color: var(--status-unknown);
+    color: oklch(1 0 0);
   }
 }

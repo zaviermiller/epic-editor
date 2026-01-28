@@ -24,10 +24,13 @@ import { GitHubApi } from "@/lib/github";
 export interface CanvasSettings {
   /** Whether to show edges between tasks in different batches */
   showInterBatchEdges: boolean;
+  /** Whether to show dependency arrows between tasks (within and across batches) */
+  showTaskDependencies: boolean;
 }
 
 const DEFAULT_SETTINGS: CanvasSettings = {
   showInterBatchEdges: true,
+  showTaskDependencies: false,
 };
 
 /**

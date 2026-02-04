@@ -18,6 +18,8 @@ interface UseEpicVisualizerReturn {
   loadingState: LoadingState;
   /** Error if any */
   error: ApiError | null;
+  /** Warning message (e.g., project status fetch failed) */
+  warning: string | null;
   /** Currently loaded epic */
   epic: Epic | null;
   /** Load an Epic from a repository */
@@ -28,11 +30,14 @@ interface UseEpicVisualizerReturn {
   clearEpic: () => void;
   /** Clear any errors */
   clearError: () => void;
+  /** Clear the warning */
+  clearWarning: () => void;
 }
 
 export function useEpicVisualizer(): UseEpicVisualizerReturn {
   const [loadingState, setLoadingState] = useState<LoadingState>("idle");
   const [error, setError] = useState<ApiError | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [epic, setEpic] = useState<Epic | null>(null);
   const apiRef = useRef<GitHubApi>(new GitHubApi());
   const { getToken } = useAuth();
@@ -52,19 +57,23 @@ export function useEpicVisualizer(): UseEpicVisualizerReturn {
     async (repoInfo: RepoInfo) => {
       setLoadingState("loading");
       setError(null);
+      setWarning(null);
 
       try {
         // Ensure we have the latest token
         await ensureToken();
 
-        const loadedEpic = await fetchEpicHierarchy(
+        const result = await fetchEpicHierarchy(
           apiRef.current,
           repoInfo.owner,
           repoInfo.repo,
           repoInfo.issueNumber,
         );
 
-        setEpic(loadedEpic);
+        setEpic(result.epic);
+        if (result.warning) {
+          setWarning(result.warning);
+        }
         setLoadingState("success");
       } catch (err) {
         const apiError: ApiError =
@@ -86,6 +95,7 @@ export function useEpicVisualizer(): UseEpicVisualizerReturn {
     setEpic(null);
     setLoadingState("idle");
     setError(null);
+    setWarning(null);
   }, []);
 
   /**
@@ -99,11 +109,19 @@ export function useEpicVisualizer(): UseEpicVisualizerReturn {
   }, [loadingState]);
 
   /**
+   * Clear the warning
+   */
+  const clearWarning = useCallback(() => {
+    setWarning(null);
+  }, []);
+
+  /**
    * Load mock data for testing
    */
   const loadMockEpic = useCallback(() => {
     setLoadingState("loading");
     setError(null);
+    setWarning(null);
     // Small delay to simulate loading
     setTimeout(() => {
       setEpic(getMockEpic());
@@ -114,10 +132,12 @@ export function useEpicVisualizer(): UseEpicVisualizerReturn {
   return {
     loadingState,
     error,
+    warning,
     epic,
     loadEpic,
     loadMockEpic,
     clearEpic,
     clearError,
+    clearWarning,
   };
 }

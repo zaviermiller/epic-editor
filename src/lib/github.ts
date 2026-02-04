@@ -25,6 +25,7 @@ import {
   ApiError,
   ExternalDependencyRef,
   ProjectStatusResult,
+  EpicFetchResult,
 } from "@/types";
 
 /**
@@ -852,18 +853,36 @@ export async function fetchProjectStatuses(
 }
 
 /**
- * Determine base issue status from GitHub issue data.
+ * Determine base issue status from GitHub issue data and optional project status.
  * This returns a preliminary status that doesn't account for dependencies.
- * For open issues without in-progress labels, returns "ready" as a placeholder
+ * For open issues without in-progress indicators, returns "ready" as a placeholder
  * that will be resolved to "ready" or "blocked" by resolveBlockedStatuses().
+ *
+ * Priority:
+ * 1. Closed state → "done" (always wins)
+ * 2. Project status (if provided and actionable) → project status wins over labels
+ * 3. Label-based detection → fallback
+ * 4. Default → "ready"
+ *
+ * @param issue - The GitHub issue
+ * @param projectStatus - Optional status from GitHub Projects v2
  */
-export function determineIssueStatus(issue: GitHubIssue): IssueStatus {
+export function determineIssueStatus(
+  issue: GitHubIssue,
+  projectStatus?: IssueStatus,
+): IssueStatus {
+  // 1. Closed always wins
   if (issue.state === "closed") {
-    // All closed issues are "done" regardless of close reason
     return "done";
   }
 
-  // Check labels for in-progress indicators
+  // 2. Project status takes precedence over labels (if it's actionable)
+  // Note: "ready" from projects is ignored so dependency resolution can run
+  if (projectStatus && projectStatus !== "ready") {
+    return projectStatus;
+  }
+
+  // 3. Check labels for in-progress indicators
   const inProgressLabels = [
     "in progress",
     "in-progress",
@@ -879,24 +898,29 @@ export function determineIssueStatus(issue: GitHubIssue): IssueStatus {
     return "in-progress";
   }
 
-  // Default to "ready" - will be resolved to "ready" or "blocked"
+  // 4. Default to "ready" - will be resolved to "ready" or "blocked"
   // by resolveBlockedStatuses() based on dependency chain
   return "ready";
 }
 
 /**
  * Convert a GitHub issue to a Task with its dependencies
+ *
+ * @param issue - The GitHub issue
+ * @param blockedByIssues - Issues that block this issue
+ * @param projectStatus - Optional status from GitHub Projects v2
  */
 export function issueToTask(
   issue: GitHubIssue,
   blockedByIssues: GitHubIssue[],
+  projectStatus?: IssueStatus,
 ): Task {
   return {
     id: issue.id,
     number: issue.number,
     title: issue.title,
     body: issue.body,
-    status: determineIssueStatus(issue),
+    status: determineIssueStatus(issue, projectStatus),
     url: issue.html_url,
     labels: issue.labels,
     assignees: issue.assignees,
@@ -907,11 +931,17 @@ export function issueToTask(
 
 /**
  * Convert a GitHub issue to a Batch with its tasks
+ *
+ * @param issue - The GitHub issue
+ * @param tasks - Tasks belonging to this batch
+ * @param blockedByIssues - Issues that block this batch
+ * @param projectStatus - Optional status from GitHub Projects v2
  */
 export function issueToBatch(
   issue: GitHubIssue,
   tasks: Task[],
   blockedByIssues: GitHubIssue[],
+  projectStatus?: IssueStatus,
 ): Batch {
   const completedTasks = tasks.filter((t) => t.status === "done").length;
   const progress =
@@ -922,7 +952,7 @@ export function issueToBatch(
     number: issue.number,
     title: issue.title,
     body: issue.body,
-    status: determineIssueStatus(issue),
+    status: determineIssueStatus(issue, projectStatus),
     url: issue.html_url,
     labels: issue.labels,
     assignees: issue.assignees,
@@ -1219,26 +1249,38 @@ export async function resolveBlockedStatuses(
  * - For nested sub-issues, we only go 1 level deep (tasks within batches don't recurse)
  *
  * Dependencies are fetched using the blocked_by API for each issue.
+ * Project statuses are fetched via GraphQL to determine in-progress state.
+ *
+ * @returns EpicFetchResult containing the epic and any warnings
  */
 export async function fetchEpicHierarchy(
   api: GitHubApi,
   owner: string,
   repo: string,
   issueNumber: number,
-): Promise<Epic> {
+): Promise<EpicFetchResult> {
   // Fetch the epic issue
   const epicIssue = await api.getIssue(owner, repo, issueNumber);
 
   // Fetch all direct sub-issues of the epic
   const directSubIssues = await api.getAllSubIssues(owner, repo, issueNumber);
 
-  // Build batches with their tasks
-  const batches: Batch[] = [];
-  const allDependencies: Dependency[] = [];
-
   // Track cross-repo dependency info for external dependency fetching
   // Map from issue number → { owner, repo, number }
   const crossRepoDepRefs = new Map<number, ExternalDependencyRef>();
+
+  // Collect all data first, then build hierarchy with project statuses
+  const allDependencies: Dependency[] = [];
+  const allIssueNumbers: number[] = [issueNumber];
+
+  // Temporary storage for issues and their metadata
+  interface IssueData {
+    issue: GitHubIssue;
+    blockedBy: GitHubIssue[];
+    childIssues: GitHubIssue[];
+    childData: Array<{ issue: GitHubIssue; blockedBy: GitHubIssue[] }>;
+  }
+  const issueDataMap = new Map<number, IssueData>();
 
   /**
    * Helper to collect dependency info, including cross-repo references
@@ -1267,9 +1309,6 @@ export async function fetchEpicHierarchy(
     }
   }
 
-  // Collect standalone tasks (sub-issues with no children)
-  const standaloneTasks: Task[] = [];
-
   // Fetch epic-level dependencies
   const epicBlockedBy = await api.getAllBlockedByDependencies(
     owner,
@@ -1278,8 +1317,10 @@ export async function fetchEpicHierarchy(
   );
   collectDependencies(issueNumber, epicBlockedBy);
 
-  // Process each direct sub-issue to determine if it's a batch or task
+  // Process each direct sub-issue to collect all data
   for (const subIssue of directSubIssues) {
+    allIssueNumbers.push(subIssue.number);
+
     // Fetch sub-issues to determine if this is a batch (has children) or task (no children)
     const childIssues = await api.getAllSubIssues(owner, repo, subIssue.number);
 
@@ -1291,12 +1332,14 @@ export async function fetchEpicHierarchy(
     );
     collectDependencies(subIssue.number, subIssueBlockedBy);
 
-    if (childIssues.length > 0) {
-      // This sub-issue has children → treat as a Batch
-      // Its children become Tasks (only 1 level deep - we don't recurse further)
-      const tasks: Task[] = [];
+    const childData: Array<{ issue: GitHubIssue; blockedBy: GitHubIssue[] }> =
+      [];
 
+    if (childIssues.length > 0) {
+      // This sub-issue has children → it will be a Batch
       for (const childIssue of childIssues) {
+        allIssueNumbers.push(childIssue.number);
+
         // Fetch task-level dependencies
         const taskBlockedBy = await api.getAllBlockedByDependencies(
           owner,
@@ -1305,15 +1348,55 @@ export async function fetchEpicHierarchy(
         );
         collectDependencies(childIssue.number, taskBlockedBy);
 
-        const task = issueToTask(childIssue, taskBlockedBy);
+        childData.push({ issue: childIssue, blockedBy: taskBlockedBy });
+      }
+    }
+
+    issueDataMap.set(subIssue.number, {
+      issue: subIssue,
+      blockedBy: subIssueBlockedBy,
+      childIssues,
+      childData,
+    });
+  }
+
+  // Fetch project statuses for all issues in a single batch query
+  const projectStatusResult = await fetchProjectStatuses(
+    api,
+    owner,
+    repo,
+    allIssueNumbers,
+  );
+  const projectStatuses = projectStatusResult.statuses;
+
+  // Now build the hierarchy with project statuses
+  const batches: Batch[] = [];
+  const standaloneTasks: Task[] = [];
+
+  for (const subIssue of directSubIssues) {
+    const data = issueDataMap.get(subIssue.number)!;
+    const subIssueProjectStatus = projectStatuses.get(subIssue.number);
+
+    if (data.childIssues.length > 0) {
+      // This sub-issue has children → treat as a Batch
+      const tasks: Task[] = [];
+
+      for (const { issue: childIssue, blockedBy: taskBlockedBy } of data.childData) {
+        const taskProjectStatus = projectStatuses.get(childIssue.number);
+        const task = issueToTask(childIssue, taskBlockedBy, taskProjectStatus);
         tasks.push(task);
       }
 
-      const batch = issueToBatch(subIssue, tasks, subIssueBlockedBy);
+      const batch = issueToBatch(
+        subIssue,
+        tasks,
+        data.blockedBy,
+        subIssueProjectStatus,
+      );
       batches.push(batch);
     } else {
       // This sub-issue has no children → treat as a standalone Task
-      const task = issueToTask(subIssue, subIssueBlockedBy);
+      const task = issueToTask(subIssue, data.blockedBy, subIssueProjectStatus);
       standaloneTasks.push(task);
     }
   }
@@ -1354,7 +1437,18 @@ export async function fetchEpicHierarchy(
 
   // Resolve "ready" statuses to "ready", "blocked", or "unknown" based on dependency chain
   // Pass the API and cross-repo refs so we can fetch external dependency statuses correctly
-  return resolveBlockedStatuses(epic, api, owner, repo, crossRepoDepRefs);
+  const resolvedEpic = await resolveBlockedStatuses(
+    epic,
+    api,
+    owner,
+    repo,
+    crossRepoDepRefs,
+  );
+
+  return {
+    epic: resolvedEpic,
+    warning: projectStatusResult.warning,
+  };
 }
 
 /**

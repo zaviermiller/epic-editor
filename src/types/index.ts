@@ -199,6 +199,17 @@ export interface Epic extends BaseIssue {
 }
 
 /**
+ * Result of fetching an Epic hierarchy.
+ * Contains the epic and any warnings that occurred during fetching.
+ */
+export interface EpicFetchResult {
+  /** The fetched epic */
+  epic: Epic;
+  /** Warning message (e.g., project status fetch failed due to missing scope) */
+  warning?: string;
+}
+
+/**
  * Loading state for async operations
  */
 export type LoadingState = "idle" | "loading" | "success" | "error";

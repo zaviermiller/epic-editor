@@ -14,12 +14,23 @@
  * Status of an issue based on GitHub's issue state and dependency chain
  *
  * - done: Issue is closed
- * - in-progress: Issue is open with an in-progress label
+ * - in-progress: Issue is open with an in-progress label or project status
  * - ready: Issue is open, not in-progress, and all dependencies are done
  * - blocked: Issue is open, not in-progress, and has at least one dependency that is not done
  * - unknown: Issue depends on an external issue whose status could not be determined
  */
 export type IssueStatus = "done" | "in-progress" | "ready" | "blocked" | "unknown";
+
+/**
+ * Result of fetching project statuses for issues.
+ * Contains the status map and any warnings that occurred during fetching.
+ */
+export interface ProjectStatusResult {
+  /** Map of issue number to its project status (if any) */
+  statuses: Map<number, IssueStatus>;
+  /** Warning message if project statuses couldn't be fetched (e.g., missing scope) */
+  warning?: string;
+}
 
 /**
  * GitHub Issue type - represents a single issue from the API

@@ -24,6 +24,7 @@ import {
   Dependency,
   ApiError,
   ExternalDependencyRef,
+  ProjectStatusResult,
 } from "@/types";
 
 /**
@@ -671,6 +672,182 @@ export class GitHubApi {
     return this.request<{ items: GitHubRepository[]; total_count: number }>(
       `/search/repositories?${queryParams}`,
     );
+  }
+}
+
+/**
+ * Project status values that indicate "in-progress" work.
+ * Case-insensitive matching is used.
+ */
+const IN_PROGRESS_PROJECT_STATUSES = [
+  "in progress",
+  "in-progress",
+  "working",
+  "wip",
+  "active",
+  "doing",
+  "started",
+];
+
+/**
+ * Project status values that indicate "blocked" work.
+ * Case-insensitive matching is used.
+ */
+const BLOCKED_PROJECT_STATUSES = ["blocked", "on hold", "waiting", "paused"];
+
+/**
+ * GraphQL response type for project items query
+ */
+interface ProjectItemsResponse {
+  repository: {
+    [key: string]: {
+      projectItems: {
+        nodes: Array<{
+          fieldValueByName: {
+            name: string;
+          } | null;
+        }>;
+      };
+    };
+  };
+}
+
+/**
+ * Map a project status string to an IssueStatus.
+ * Returns null if the status doesn't map to a known IssueStatus.
+ */
+function mapProjectStatusToIssueStatus(
+  projectStatus: string,
+): IssueStatus | null {
+  const normalized = projectStatus.toLowerCase().trim();
+
+  if (IN_PROGRESS_PROJECT_STATUSES.includes(normalized)) {
+    return "in-progress";
+  }
+
+  if (BLOCKED_PROJECT_STATUSES.includes(normalized)) {
+    return "blocked";
+  }
+
+  // "ready", "todo", "backlog", etc. - let the dependency resolution handle it
+  return null;
+}
+
+/**
+ * Resolve the most "active" status from multiple project statuses.
+ * Priority: in-progress > blocked > null (no override)
+ */
+function resolveMultipleProjectStatuses(
+  statuses: Array<IssueStatus | null>,
+): IssueStatus | null {
+  const validStatuses = statuses.filter((s): s is IssueStatus => s !== null);
+
+  if (validStatuses.includes("in-progress")) {
+    return "in-progress";
+  }
+
+  if (validStatuses.includes("blocked")) {
+    return "blocked";
+  }
+
+  return null;
+}
+
+/**
+ * Fetch project statuses for multiple issues using a batched GraphQL query.
+ *
+ * This function queries GitHub Projects v2 to get the "Status" field value
+ * for each issue. If an issue is in multiple projects, the most "active"
+ * status wins (in-progress > blocked > ready).
+ *
+ * @param api - The GitHubApi instance to use
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param issueNumbers - Array of issue numbers to fetch statuses for
+ * @returns ProjectStatusResult with statuses map and optional warning
+ */
+export async function fetchProjectStatuses(
+  api: GitHubApi,
+  owner: string,
+  repo: string,
+  issueNumbers: number[],
+): Promise<ProjectStatusResult> {
+  if (issueNumbers.length === 0) {
+    return { statuses: new Map() };
+  }
+
+  // Build a batched GraphQL query using aliases
+  // Each issue gets an alias like "issue_123" to allow fetching multiple in one query
+  const issueQueries = issueNumbers
+    .map(
+      (num) => `
+    issue_${num}: issue(number: ${num}) {
+      projectItems(first: 10) {
+        nodes {
+          fieldValueByName(name: "Status") {
+            ... on ProjectV2ItemFieldSingleSelectValue {
+              name
+            }
+          }
+        }
+      }
+    }`,
+    )
+    .join("\n");
+
+  const query = `
+    query($owner: String!, $repo: String!) {
+      repository(owner: $owner, name: $repo) {
+        ${issueQueries}
+      }
+    }
+  `;
+
+  try {
+    const data = await api.graphqlRequest<ProjectItemsResponse>(query, {
+      owner,
+      repo,
+    });
+
+    const statuses = new Map<number, IssueStatus>();
+
+    for (const issueNumber of issueNumbers) {
+      const issueData = data.repository[`issue_${issueNumber}`];
+      if (!issueData?.projectItems?.nodes) continue;
+
+      // Collect all project statuses for this issue
+      const projectStatuses = issueData.projectItems.nodes
+        .map((node) => {
+          const statusName = node.fieldValueByName?.name;
+          return statusName ? mapProjectStatusToIssueStatus(statusName) : null;
+        })
+        .filter((s): s is IssueStatus | null => true);
+
+      // Resolve to the most "active" status
+      const resolvedStatus = resolveMultipleProjectStatuses(projectStatuses);
+      if (resolvedStatus) {
+        statuses.set(issueNumber, resolvedStatus);
+      }
+    }
+
+    return { statuses };
+  } catch (error) {
+    // Check if this is a scope error
+    const apiError = error as ApiError;
+    if (apiError.details === "INSUFFICIENT_SCOPES") {
+      return {
+        statuses: new Map(),
+        warning:
+          "Project status unavailable. Your token needs the 'read:project' scope to fetch project board statuses. Falling back to label-based detection.",
+      };
+    }
+
+    // For other errors, log and continue without project statuses
+    console.error("Failed to fetch project statuses:", error);
+    return {
+      statuses: new Map(),
+      warning: `Could not fetch project statuses: ${apiError.message}`,
+    };
   }
 }
 

@@ -174,6 +174,66 @@ export class GitHubApi {
   }
 
   /**
+   * GraphQL error type for parsing responses
+   */
+  private isInsufficientScopesError(
+    errors: Array<{ type?: string; message?: string }>,
+  ): boolean {
+    return errors.some((e) => e.type === "INSUFFICIENT_SCOPES");
+  }
+
+  /**
+   * Make a GraphQL request to the GitHub API
+   *
+   * @param query - The GraphQL query string
+   * @param variables - Optional variables for the query
+   * @returns The data from the GraphQL response
+   * @throws ApiError with details about the failure
+   */
+  async graphqlRequest<T>(
+    query: string,
+    variables?: Record<string, unknown>,
+  ): Promise<T> {
+    const url = "https://api.github.com/graphql";
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: this.getHeaders(),
+      body: JSON.stringify({ query, variables }),
+    });
+
+    if (!response.ok) {
+      const error: ApiError = {
+        message: `GitHub GraphQL API error: ${response.statusText}`,
+        status: response.status,
+      };
+
+      if (response.status === 401) {
+        error.message =
+          "Authentication required. Please provide a valid GitHub token.";
+      }
+
+      throw error;
+    }
+
+    const result = await response.json();
+
+    // GraphQL returns 200 even for errors, check the errors field
+    if (result.errors && result.errors.length > 0) {
+      const error: ApiError = {
+        message: result.errors[0].message || "GraphQL request failed",
+        status: 200,
+        details: this.isInsufficientScopesError(result.errors)
+          ? "INSUFFICIENT_SCOPES"
+          : undefined,
+      };
+      throw error;
+    }
+
+    return result.data as T;
+  }
+
+  /**
    * Fetch a single issue from GitHub
    */
   async getIssue(

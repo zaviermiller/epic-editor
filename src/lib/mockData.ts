@@ -3,6 +3,11 @@
  *
  * Provides a complete mock Epic with batches, tasks, and dependencies
  * for testing the visualizer without requiring GitHub API access.
+ *
+ * Note: Mock data bypasses the GitHub API and GraphQL project status fetching.
+ * Status values here are set directly, simulating what would be returned after
+ * project status resolution. In production, "in-progress" status comes from
+ * either GitHub Projects v2 board status or labels like "wip"/"in progress".
  */
 
 import { Epic, Batch, Task, Dependency, IssueStatus } from "@/types";

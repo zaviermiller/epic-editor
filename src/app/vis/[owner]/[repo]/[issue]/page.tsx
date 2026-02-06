@@ -24,6 +24,7 @@ import {
   LinkExternalIcon,
   CheckCircleFillIcon,
   XCircleIcon,
+  AlertFillIcon,
 } from "@primer/octicons-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -155,6 +156,47 @@ function SaveToast({
   );
 }
 
+/**
+ * Toast notification for warnings (e.g., missing project status scope)
+ */
+function WarningToast({
+  message,
+  onClose,
+}: {
+  message: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 8000); // Slightly longer for warnings
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div className="fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg border bg-amber-50 border-amber-200 dark:bg-amber-950 dark:border-amber-800 max-w-md">
+      <div className="flex items-start gap-3">
+        <AlertFillIcon
+          size={20}
+          className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5"
+        />
+        <div className="flex-1">
+          <p className="font-medium text-amber-800 dark:text-amber-200">
+            Warning
+          </p>
+          <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+            {message}
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200"
+        >
+          ×
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function VisPage({ params }: VisPageProps) {
   const { owner, repo, issue } = use(params);
   const issueNumber = parseInt(issue, 10);
@@ -165,6 +207,7 @@ export default function VisPage({ params }: VisPageProps) {
   const [epic, setEpic] = useState<Epic | null>(null);
   const [loadingState, setLoadingState] = useState<LoadingState>("idle");
   const [error, setError] = useState<ApiError | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [isFavorited, setIsFavorited] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [saveResult, setSaveResult] = useState<SaveResult | null>(null);
@@ -217,6 +260,7 @@ export default function VisPage({ params }: VisPageProps) {
       if (!isBackgroundRefresh) {
         setLoadingState("loading");
         setError(null);
+        setWarning(null);
       } else {
         setIsRefreshing(true);
       }
@@ -226,19 +270,22 @@ export default function VisPage({ params }: VisPageProps) {
         const api = new GitHubApi();
         api.setToken(token || undefined);
 
-        const loadedEpic = await fetchEpicHierarchy(
+        const result = await fetchEpicHierarchy(
           api,
           owner,
           repo,
           issueNumber,
         );
 
-        setEpic(loadedEpic);
+        setEpic(result.epic);
+        if (result.warning) {
+          setWarning(result.warning);
+        }
         setLoadingState("success");
 
         // Update localStorage if this is a favorite
         if (isFavorite(owner, repo, issueNumber)) {
-          updateFavoriteEpic(loadedEpic);
+          updateFavoriteEpic(result.epic);
         }
       } catch (err) {
         if (!isBackgroundRefresh) {
@@ -554,6 +601,11 @@ export default function VisPage({ params }: VisPageProps) {
         {/* Save result toast */}
         {saveResult && (
           <SaveToast result={saveResult} onClose={() => setSaveResult(null)} />
+        )}
+
+        {/* Warning toast */}
+        {warning && (
+          <WarningToast message={warning} onClose={() => setWarning(null)} />
         )}
       </main>
     </div>
